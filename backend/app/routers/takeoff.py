@@ -9,7 +9,7 @@ from ..db import get_db
 from ..models import CountItem, CountType, Level, Material, Run, Service, Sheet, Stage, User
 from ..schemas import CountIn, CountOut, CountPatch, RunIn, RunOut, RunPatch
 from ..takeoff import recompute_run, resolve_scale
-from . import get_or_404
+from . import ensure_open, get_or_404
 
 router = APIRouter(prefix="/api", tags=["takeoff"])
 
@@ -38,7 +38,8 @@ def _waste_for(db: Session, material: str) -> float:
     return m.waste_pct if m else 0.0
 
 
-def _ensure_editable(sheet: Sheet):
+def _ensure_editable(sheet: Sheet, db: Session):
+    ensure_open(db, sheet.job_id)
     if not sheet.is_current:
         raise HTTPException(409, "This sheet has been superseded by a later revision. Measure on the current one.")
 
@@ -57,7 +58,7 @@ def job_runs(job_id: int, db: Session = Depends(get_db), _: User = Depends(curre
 @router.post("/sheets/{sheet_id}/runs", response_model=RunOut)
 def create_run(sheet_id: int, body: RunIn, db: Session = Depends(get_db), user: User = Depends(current_user)):
     sheet = get_or_404(db, Sheet, sheet_id)
-    _ensure_editable(sheet)
+    _ensure_editable(sheet, db)
     data = body.model_dump()
     _check_refs(db, sheet.job_id, data)
     m_per_pt, viewport_id = resolve_scale(sheet, data["geometry"])
@@ -80,7 +81,7 @@ def create_run(sheet_id: int, body: RunIn, db: Session = Depends(get_db), user: 
 def update_run(run_id: int, body: RunPatch, db: Session = Depends(get_db), user: User = Depends(current_user)):
     run = get_or_404(db, Run, run_id)
     sheet = db.get(Sheet, run.sheet_id)
-    _ensure_editable(sheet)
+    _ensure_editable(sheet, db)
     data = body.model_dump(exclude_unset=True)
     _check_refs(db, run.job_id, data)
     before = snapshot(run)
@@ -100,6 +101,7 @@ def update_run(run_id: int, body: RunPatch, db: Session = Depends(get_db), user:
 @router.delete("/runs/{run_id}", status_code=204)
 def delete_run(run_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
     run = get_or_404(db, Run, run_id)
+    ensure_open(db, run.job_id)
     record(db, user.id, "run", run.id, "delete", before=snapshot(run))
     db.delete(run)
     db.commit()
@@ -114,7 +116,7 @@ def sheet_counts(sheet_id: int, db: Session = Depends(get_db), _: User = Depends
 @router.post("/sheets/{sheet_id}/counts", response_model=CountOut)
 def create_count(sheet_id: int, body: CountIn, db: Session = Depends(get_db), user: User = Depends(current_user)):
     sheet = get_or_404(db, Sheet, sheet_id)
-    _ensure_editable(sheet)
+    _ensure_editable(sheet, db)
     data = body.model_dump()
     _check_refs(db, sheet.job_id, data)
     if not (0 <= data["x"] <= sheet.width_pt and 0 <= data["y"] <= sheet.height_pt):
@@ -133,7 +135,7 @@ def create_count(sheet_id: int, body: CountIn, db: Session = Depends(get_db), us
 @router.patch("/counts/{count_id}", response_model=CountOut)
 def update_count(count_id: int, body: CountPatch, db: Session = Depends(get_db), user: User = Depends(current_user)):
     item = get_or_404(db, CountItem, count_id)
-    _ensure_editable(db.get(Sheet, item.sheet_id))
+    _ensure_editable(db.get(Sheet, item.sheet_id), db)
     data = body.model_dump(exclude_unset=True)
     _check_refs(db, item.job_id, data)
     before = snapshot(item)
@@ -147,6 +149,7 @@ def update_count(count_id: int, body: CountPatch, db: Session = Depends(get_db),
 @router.delete("/counts/{count_id}", status_code=204)
 def delete_count(count_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
     item = get_or_404(db, CountItem, count_id)
+    ensure_open(db, item.job_id)
     record(db, user.id, "count", item.id, "delete", before=snapshot(item))
     db.delete(item)
     db.commit()

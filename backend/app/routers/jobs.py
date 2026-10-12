@@ -14,7 +14,7 @@ from ..models import DrawingFile, Job, Level, Run, User
 from ..pdf_processing import process_file
 from ..schemas import FileOut, JobIn, JobOut, JobPatch, LevelIn, LevelOut, SheetOut
 from ..takeoff import job_totals, recompute_run
-from . import get_or_404
+from . import ensure_open, get_or_404
 
 router = APIRouter(prefix="/api", tags=["jobs"])
 
@@ -42,6 +42,9 @@ def get_job(job_id: int, db: Session = Depends(get_db), _: User = Depends(curren
 @router.patch("/jobs/{job_id}", response_model=JobOut)
 def update_job(job_id: int, body: JobPatch, db: Session = Depends(get_db), user: User = Depends(current_user)):
     job = get_or_404(db, Job, job_id)
+    ensure_open(db, job.id)
+    if body.status in ("final",):
+        raise HTTPException(422, "Use sign-off to make an estimate final")
     before = snapshot(job)
     for k, v in body.model_dump(exclude_unset=True).items():
         setattr(job, k, v)
@@ -65,6 +68,7 @@ async def upload_files(
 ):
     """Upload one combined PDF or many single-page PDFs. Each is split into sheets."""
     job = get_or_404(db, Job, job_id)
+    ensure_open(db, job.id)
     created = []
     for up in files:
         name = up.filename or "drawing.pdf"
@@ -103,6 +107,7 @@ def list_levels(job_id: int, db: Session = Depends(get_db), _: User = Depends(cu
 @router.post("/jobs/{job_id}/levels", response_model=LevelOut)
 def create_level(job_id: int, body: LevelIn, db: Session = Depends(get_db), user: User = Depends(current_user)):
     get_or_404(db, Job, job_id)
+    ensure_open(db, job_id)
     level = Level(job_id=job_id, **body.model_dump())
     db.add(level)
     db.flush()
@@ -123,6 +128,7 @@ def _refresh_level_verticals(db: Session, job_id: int):
 @router.put("/levels/{level_id}", response_model=LevelOut)
 def update_level(level_id: int, body: LevelIn, db: Session = Depends(get_db), user: User = Depends(current_user)):
     level = get_or_404(db, Level, level_id)
+    ensure_open(db, level.job_id)
     before = snapshot(level)
     for k, v in body.model_dump().items():
         setattr(level, k, v)
@@ -136,6 +142,7 @@ def update_level(level_id: int, body: LevelIn, db: Session = Depends(get_db), us
 @router.delete("/levels/{level_id}", status_code=204)
 def delete_level(level_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
     level = get_or_404(db, Level, level_id)
+    ensure_open(db, level.job_id)
     job_id = level.job_id
     record(db, user.id, "level", level.id, "delete", before=snapshot(level))
     db.delete(level)
