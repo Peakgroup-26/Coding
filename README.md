@@ -2,7 +2,7 @@
 
 A web app for Peak Plumbing & Gas Services that turns commercial hydraulic drawings into measured, staged quantities, and later a priced estimate. It follows the build brief "Hydraulic Take-off & Estimating System — Build Brief for Codex".
 
-**Status: Phases 1 (core take-off), 2 (rules, staging, check-measure) and 3 (pricing) are built.** Phases 4–5 are still to come (see below).
+**Status: Phases 1 (core take-off), 2 (rules, staging, check-measure), 3 (pricing) and 4 (AI assistance) are built.** Phase 5 is still to come (see below).
 
 ## What Phase 1 does
 
@@ -122,6 +122,8 @@ If you don't set them, the first admin account is `admin@peak.local` / `changeme
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | `admin@peak.local` / `changeme` | First admin account, created only when there are no users |
 | `MAX_UPLOAD_MB` | 200 | |
 | `CORS_ORIGINS` | `http://localhost:5173` | |
+| `TAKEOFF_AI` | off | `claude` turns on AI sheet reading (needs `ANTHROPIC_API_KEY`). Drawings are sent to Anthropic's API when used |
+| `TAKEOFF_AI_MODEL` | `claude-opus-5-5` | Model for AI sheet reading |
 
 ## Viewer shortcuts
 
@@ -178,6 +180,28 @@ DECISIONS.md         assumptions and choices made where the brief left room
   - Upload Peak's known final quantities (service, dn, material, qty) for a completed job, and enter its known total.
   - The app reports the variance per service and per line, and on price.
 
+## What Phase 4 adds
+
+Everything here only *suggests*. Suggestions are drawn dashed, labelled, and stay out of totals, fittings and pricing until someone confirms them.
+
+- **AI sheet reading (optional, off by default).**
+  - With `TAKEOFF_AI=claude` and an Anthropic API key on the server, *Read sheets with AI* sends each unconfirmed sheet's image and text layer to Claude.
+  - It reads the title block (number, title, revision, scale), the sheet type and services, and any legend.
+  - It fills in only sheets that haven't been confirmed. A person still confirms each one.
+  - Drawings leave Peak's server when this is on, so turn it on deliberately.
+- **Line styles to suggested runs.** This runs locally.
+  - A sheet's vector line work is grouped by colour, line type, width and CAD layer, with the length of each style.
+  - Tick the styles that are pipework and say what each is (service, DN, material). Hovering highlights where each is drawn.
+  - *Suggest runs* chains each style into runs: it follows connected segments, breaks at junctions, and bridges small gaps in exploded dashes.
+  - Styles are remembered per client, so the next sheet from the same consultant needs one click.
+- **Symbol matching.** This also runs locally.
+  - Select one counted symbol, then *Find more like this one*. It searches the sheet image, including rotated copies.
+  - Each match becomes a suggested count.
+- **Review:** confirm or reject one at a time, or *Accept all* / *Reject all* on a sheet.
+- **Statistics:**
+  - Each sheet shows how many suggestions were accepted as is, edited then accepted, rejected, or still pending.
+  - Classification accuracy compares the first proposal (keywords, remembered, or AI) with what people confirmed, against the brief's 90% target. The test set is every confirmed sheet.
+
 Phase 2's acceptance criteria are tested in `backend/tests/test_phase2_rules.py` and `test_phase2_checks.py`:
 
 - Every generated item traces to its rule and its source.
@@ -189,9 +213,16 @@ Phase 3's are tested in `test_phase3_pricing.py`:
 - An imported price book reproduces a known estimate within ±1%.
 - Unmapped items block final pricing.
 
+Phase 4's are tested in `test_phase4_ai.py`:
+
+- Suggestions never enter totals or pricing unconfirmed.
+- Accepted, edited and rejected counts are tracked.
+- Accuracy is measured.
+
+The 90% classification target can only be checked on Peak's own drawings.
+
 ## Next phases (from the brief)
 
-4. AI assistance: sheet classification, legend reading, run and fixture suggestions
 5. Revision compare, marked-up PDF export, Microsoft 365 single sign-on
 
 Peak's inputs (the brief's "Inputs Peak must supply") are needed now, especially the fitting and sundry rules, the Simpro prebuild export, the rates, and three completed jobs for the golden-job test.

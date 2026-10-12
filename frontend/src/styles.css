@@ -146,3 +146,11 @@ table.r-cols-4 td:nth-child(4), table.r-cols-4 th:nth-child(4), table.r-cols-4 t
 input.wide-input { flex: 1; min-width: 260px; }
 input.small-input { width: 110px; }
 .callout { margin-bottom: 8px; }
+
+/* Phase 4 */
+ul.items.styles li { flex-wrap: wrap; cursor: default; }
+.line-sample { display: inline-block; width: 28px; height: 0; border-top: 2px solid #000; margin: 0 4px; }
+.style-meta { color: var(--muted); }
+.style-assign { display: flex; gap: 4px; flex-basis: 100%; padding-left: 22px; }
+.style-assign select { max-width: 120px; }
+.ai-stats { border-top: 1px solid var(--line); margin-top: 10px; padding-top: 4px; }

@@ -35,6 +35,8 @@ export interface Sheet {
   scale_verified: boolean; verification_data: Verification | null;
   classification: string; services_shown: string[] | null; is_hydraulic: boolean;
   confidence: number; confirmed: boolean; is_current: boolean; is_duplicate: boolean;
+  proposed: { classification: string; services: string[]; is_hydraulic: boolean; source: string } | null;
+  ai_reading: AiReading | null;
   viewports: Viewport[];
 }
 
@@ -44,13 +46,13 @@ export interface Run {
   location_tag: string; geometry: Pt[]; m_per_pt: number; length_m: number;
   vertical_mode: "none" | "manual" | "levels"; vertical_count: number; vertical_height_m: number;
   vertical_from_level_id: number | null; vertical_to_level_id: number | null; vertical_m: number;
-  waste_pct: number; status: "suggested" | "confirmed"; source: string; note: string;
+  waste_pct: number; status: "suggested" | "confirmed"; source: string; ai_edited: boolean; note: string;
 }
 
 export interface CountItem {
   id: number; job_id: number; sheet_id: number; service_id: number; item_type: string;
   x: number; y: number; level_id: number | null; stage_id: number | null; location_tag: string;
-  status: "suggested" | "confirmed"; source: string;
+  status: "suggested" | "confirmed"; source: string; ai_edited: boolean;
 }
 
 export interface TotalsLine {
@@ -157,4 +159,22 @@ export interface PricingJob extends Job {
   price_book_version_id: number | null; margin_basis: "markup" | "margin"; default_margin_pct: number;
   service_margins: Record<string, number> | null; stage_margins: Record<string, number> | null;
   gst_pct: number; reference_total_ex_gst: number | null;
+}
+
+export interface AiReading {
+  sheet_no: string; title: string; revision: string; scale_text: string; sheet_type: string; services: string[];
+  is_hydraulic: boolean; confidence: number; model: string;
+  legend: { description: string; item_type: string; service_code: string }[];
+}
+export interface AiStatus { enabled: boolean; provider: string | null; model: string | null }
+export interface LineStyle {
+  key: string; colour: string; dashes: string; width: number; layer: string; segments: number;
+  length_pt: number; length_m: number | null; bbox: [number, number, number, number];
+  mapping: { service_id: number; dn: number; material: string } | null;
+}
+export interface AiStats {
+  sheets: { sheet_id: number; sheet_no: string; accepted: number; edited: number; rejected: number; pending: number }[];
+  classification: { sheets_confirmed: number; type_correct_pct: number | null; services_correct_pct: number | null;
+    both_correct_pct: number | null; target_pct: number; by_source: Record<string, { sheets: number; correct_pct: number }> };
+  ai: AiStatus;
 }
