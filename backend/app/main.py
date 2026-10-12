@@ -1,6 +1,5 @@
 import logging
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -9,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 
 from . import config
 from .db import Base, SessionLocal, engine
-from .routers import auth_users, estimate, jobs, rules, settings, sheets, takeoff
+from .routers import auth_users, estimate, jobs, pricing, rules, settings, sheets, takeoff
 from .seed import seed
 
 logging.basicConfig(level=logging.INFO)
@@ -28,7 +27,7 @@ async def lifespan(app: FastAPI):
 def create_app() -> FastAPI:
     app = FastAPI(title="Peak Hydraulic Take-off", lifespan=lifespan)
     app.add_middleware(CORSMiddleware, allow_origins=config.CORS_ORIGINS, allow_methods=["*"], allow_headers=["*"])
-    for r in (auth_users.router, settings.router, jobs.router, sheets.router, takeoff.router, rules.router, estimate.router):
+    for r in (auth_users.router, settings.router, jobs.router, sheets.router, takeoff.router, rules.router, estimate.router, pricing.router):
         app.include_router(r)
 
     @app.get("/api/health")

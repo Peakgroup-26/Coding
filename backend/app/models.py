@@ -5,7 +5,7 @@ Geometry is stored in sheet coordinates: PDF points (1/72 inch) on the page as d
 """
 from datetime import date, datetime, timezone
 
-from sqlalchemy import JSON, Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .db import Base
@@ -79,7 +79,14 @@ class Job(Base):
     quote_no: Mapped[str] = mapped_column(String(100), default="")
     due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     status: Mapped[str] = mapped_column(String(30), default="draft")
-    price_book_version_id: Mapped[int | None] = mapped_column(Integer, nullable=True)  # Phase 3
+    price_book_version_id: Mapped[int | None] = mapped_column(ForeignKey("price_book_versions.id"), nullable=True)
+    # Pricing settings. margin_basis: "markup" (sell = cost x (1 + p)) or "margin" (sell = cost / (1 - p)).
+    margin_basis: Mapped[str] = mapped_column(String(10), default="markup")
+    default_margin_pct: Mapped[float] = mapped_column(Float, default=0.0)
+    service_margins: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # {"SAN": 20}
+    stage_margins: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # {"Fit-off": 15}
+    gst_pct: Mapped[float] = mapped_column(Float, default=10.0)
+    reference_total_ex_gst: Mapped[float | None] = mapped_column(Float, nullable=True)  # known past estimate, for comparison
     signed_off_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     signed_off_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     checks_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -337,3 +344,106 @@ class Flag(Base):
     resolved_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     note: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+# --- Phase 3: pricing ---
+class PriceBookVersion(Base):
+    """A snapshot of Peak's prices. Jobs point at one; once locked it never changes, so an old
+    estimate keeps the rates it was priced with."""
+    __tablename__ = "price_book_versions"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    label: Mapped[str] = mapped_column(String(200))
+    notes: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    locked: Mapped[bool] = mapped_column(Boolean, default=False)
+    locked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    default_labour_rate_code: Mapped[str] = mapped_column(String(100), default="")
+
+
+class PriceItem(Base):
+    """A material or catalogue item with its cost in one price-book version."""
+    __tablename__ = "price_items"
+    __table_args__ = (UniqueConstraint("version_id", "code"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    version_id: Mapped[int] = mapped_column(ForeignKey("price_book_versions.id", ondelete="CASCADE"), index=True)
+    code: Mapped[str] = mapped_column(String(100))
+    description: Mapped[str] = mapped_column(String(500), default="")
+    uom: Mapped[str] = mapped_column(String(20), default="ea")
+    cost: Mapped[float] = mapped_column(Float, default=0.0)
+    supplier: Mapped[str] = mapped_column(String(200), default="")
+
+
+class Prebuild(Base):
+    """An assembly of items (and possibly other prebuilds) plus labour, as in Simpro."""
+    __tablename__ = "prebuilds"
+    __table_args__ = (UniqueConstraint("version_id", "code"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    version_id: Mapped[int] = mapped_column(ForeignKey("price_book_versions.id", ondelete="CASCADE"), index=True)
+    code: Mapped[str] = mapped_column(String(100))
+    description: Mapped[str] = mapped_column(String(500), default="")
+    uom: Mapped[str] = mapped_column(String(20), default="ea")
+    labour_hours: Mapped[float] = mapped_column(Float, default=0.0)
+    labour_rate_code: Mapped[str] = mapped_column(String(100), default="")  # blank = the version's default rate
+    components: Mapped[list] = mapped_column(JSON, default=list)  # [{"code": "...", "qty": 1.0}]
+
+
+class LabourRate(Base):
+    __tablename__ = "labour_rates"
+    __table_args__ = (UniqueConstraint("version_id", "code"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    version_id: Mapped[int] = mapped_column(ForeignKey("price_book_versions.id", ondelete="CASCADE"), index=True)
+    code: Mapped[str] = mapped_column(String(100))
+    description: Mapped[str] = mapped_column(String(200), default="")
+    rate: Mapped[float] = mapped_column(Float, default=0.0)  # $ per hour, ex GST
+
+
+class PriceMapping(Base):
+    """Maps a take-off item to a prebuild or catalogue item code. Codes, not ids, so mappings
+    carry across price-book versions.
+
+    source_kind: pipe (service + material + DN, per metre) | count (item type) | fitting (description)
+    Blank service_code matches any service; a mapping for the exact service wins.
+    """
+    __tablename__ = "price_mappings"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    source_kind: Mapped[str] = mapped_column(String(10))
+    service_code: Mapped[str] = mapped_column(String(20), default="")
+    material: Mapped[str] = mapped_column(String(100), default="")
+    dn: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    item_type: Mapped[str] = mapped_column(String(100), default="")
+    description: Mapped[str] = mapped_column(String(300), default="")
+    target_kind: Mapped[str] = mapped_column(String(10))  # prebuild | item
+    target_code: Mapped[str] = mapped_column(String(100))
+    factor: Mapped[float] = mapped_column(Float, default=1.0)  # target qty per source unit
+    note: Mapped[str] = mapped_column(String(300), default="")
+
+
+class JobAllowance(Base):
+    """PC items, provisional sums and exclusions on a job."""
+    __tablename__ = "job_allowances"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id", ondelete="CASCADE"), index=True)
+    kind: Mapped[str] = mapped_column(String(15))  # pc | provisional | exclusion
+    description: Mapped[str] = mapped_column(String(500))
+    amount: Mapped[float] = mapped_column(Float, default=0.0)  # ex GST; ignored for exclusions
+    service_id: Mapped[int | None] = mapped_column(ForeignKey("services.id"), nullable=True)
+    stage_id: Mapped[int | None] = mapped_column(ForeignKey("stages.id"), nullable=True)
+    apply_margin: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class ReferenceLine(Base):
+    """A known quantity from a completed job, for the golden-job comparison."""
+    __tablename__ = "reference_lines"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id", ondelete="CASCADE"), index=True)
+    service_code: Mapped[str] = mapped_column(String(20))
+    dn: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    material: Mapped[str] = mapped_column(String(100), default="")
+    qty_m: Mapped[float] = mapped_column(Float)
+
+
+class AppSetting(Base):
+    """Small admin-editable settings, e.g. the Simpro CSV template."""
+    __tablename__ = "app_settings"
+    key: Mapped[str] = mapped_column(String(100), primary_key=True)
+    value: Mapped[dict | list | None] = mapped_column(JSON, nullable=True)

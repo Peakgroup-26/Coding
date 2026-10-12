@@ -193,6 +193,23 @@ def find_problems(db: Session, job_id: int) -> list[Finding]:
         out.append(Finding("second_pass", "job", "error",
                            f"Independent re-sum of all runs gives {second} m but the totals show {shown} m."))
 
+    # Pricing: not priced (acceptable for a take-off-only job), or items without a price
+    job = db.get(Job, job_id)
+    if job.price_book_version_id is None:
+        out.append(Finding("not_priced", "job", "warning", "No price book is selected, so this estimate isn't priced."))
+    else:
+        from .pricing import price_job  # local import: pricing imports takeoff and rules
+
+        p = price_job(db, job_id)
+        for u in p["unmapped"]:
+            label = f"{u['service_code']} {u['description']}".strip()
+            out.append(Finding("unmapped", f"unmapped:{u['kind']}:{u['service_code']}:{u['description']}:{u['stage']}", "error",
+                               f"{label} ({u['qty']:g} {u['uom']}, {u['stage']}) isn't mapped to a prebuild or catalogue item. "
+                               "Unmapped items block sign-off."))
+        for code in p["missing_codes"]:
+            out.append(Finding("missing_price", f"missing:{code}", "error",
+                               f"Code '{code}' is mapped but isn't in the price book. This blocks sign-off."))
+
     # Fittings not generated yet, or out of date
     has_rules = db.scalar(select(Rule.id).where(Rule.active.is_(True)).limit(1)) is not None
     has_generated = db.scalar(select(GeneratedItem.id).where(GeneratedItem.job_id == job_id, GeneratedItem.rule_id.is_not(None)).limit(1)) is not None

@@ -137,6 +137,9 @@ def build_workbook(db: Session, job_id: int) -> bytes:
         flag_rows.append([f.severity, f.check_type, sheet_labels.get(f.sheet_id, ""), f.message, f.status, f.note])
     _sheet(wb, "Flags and notes", ["Severity", "Check", "Sheet", "Message", "Status", "Note"], flag_rows)
 
+    if job.price_book_version_id:
+        _pricing_sheet(wb, db, job)
+
     reg = []
     for s in sorted(sheets.values(), key=lambda s: (s.sheet_no or "~", s.revision)):
         reg.append([s.sheet_no, s.title, s.revision, s.page_size, s.stated_scale,
@@ -162,3 +165,33 @@ def _source_label(ref: str, sheets: dict, db: Session) -> str:
         sh = sheets.get(c.sheet_id) if c else None
         return f"{c.item_type if c else 'Count'} #{rest}" + (f" ({sh.sheet_no or f'p{sh.page_no}'})" if sh else "")
     return {"job": "Whole job", "manual": "Added by hand"}.get(ref, ref)
+
+
+def _pricing_sheet(wb: Workbook, db: Session, job: Job) -> None:
+    from .pricing import price_job
+
+    p = price_job(db, job.id)
+    rows = [[l["stage"], l["service_code"], l["kind"], l["description"], l["qty"], l["uom"], l["target_kind"], l["target_code"],
+             l.get("target_description", ""), l.get("material_cost"), l.get("labour_hours"), l.get("labour_cost"),
+             l.get("cost"), l.get("margin_pct"), l.get("sell")] for l in p["lines"]]
+    ws = _sheet(wb, "Pricing", ["Stage", "Service", "Source", "Take-off item", "Qty", "Unit", "Priced as", "Code", "Code description",
+                                "Material $", "Labour hrs", "Labour $", "Cost $", "Margin %", "Sell $ ex GST"], rows,
+                {10, 12, 13, 15})
+    for a in p["allowances"]:
+        label = {"pc": "PC item", "provisional": "Provisional sum", "exclusion": "Exclusion"}[a["kind"]]
+        ws.append([a["stage"], a["service_code"], label, a["description"], None, None, None, None, None,
+                   None, None, None, a["amount"] if a["kind"] != "exclusion" else None, a.get("margin_pct"), a.get("sell")])
+    for u in p["unmapped"]:
+        ws.append([u["stage"], u["service_code"], u["kind"], u["description"], u["qty"], u["uom"], "UNMAPPED"])
+    s = p["summary"]
+    if s:
+        ws.append([])
+        ws.append([f"Price book: {p['price_book']['label']}" + ("" if p["price_book"]["locked"] else " (DRAFT)"),
+                   f"Margins as {p['margin_basis']}"])
+        for label, key in (("Materials", "material_cost"), ("Labour", "labour_cost"), ("Labour hours", "labour_hours"),
+                           ("PC items and provisional sums", "allowances_cost"), ("Total cost", "cost"), ("Margin", "margin"),
+                           ("Total ex GST", "sell_ex_gst"), ("GST", "gst"), ("Total inc GST", "sell_inc_gst")):
+            ws.append([label, None, None, None, None, None, None, None, None, None, None, None, None, None, s[key]])
+            ws.cell(ws.max_row, 15).number_format = M_FMT if key != "labour_hours" else "0.00"
+        if p["missing_codes"]:
+            ws.append([f"Codes missing from the price book: {', '.join(p['missing_codes'])}"])

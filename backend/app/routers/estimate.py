@@ -10,7 +10,8 @@ from ..audit import record, snapshot
 from ..auth import current_user
 from ..checks import run_checks
 from ..db import get_db
-from ..models import AuditLog, Flag, GeneratedItem, Job, Service, Stage, User
+from ..models import AuditLog, Flag, GeneratedItem, Job, PriceBookVersion, Service, Stage, User
+from ..pricing import price_job
 from ..rules import DISCLAIMER, effective_qty, generate
 from ..schemas import AuditOut, FlagOut, FlagPatch, GeneratedItemOut, GeneratedItemPatch, JobOut, ManualItemIn
 from ..takeoff import job_totals
@@ -179,6 +180,15 @@ def finalise(job_id: int, db: Session = Depends(get_db), user: User = Depends(re
     open_flags = [f for f in flags if f.status == "open"]
     if open_flags:
         raise HTTPException(409, f"{len(open_flags)} check-measure flag(s) are still open. Resolve or accept each with a note first.")
+    if job.price_book_version_id is not None:
+        # Unpriced items can't be accepted away: they block final pricing outright.
+        book = db.get(PriceBookVersion, job.price_book_version_id)
+        if not book.locked:
+            raise HTTPException(409, f"Price book '{book.label}' is still a draft. Lock it, or choose a locked one, before sign-off.")
+        p = price_job(db, job_id)
+        if p["unmapped"] or p["missing_codes"]:
+            raise HTTPException(409, f"Pricing is incomplete: {len(p['unmapped'])} unmapped item(s) and "
+                                     f"{len(p['missing_codes'])} code(s) missing from the price book.")
     before = snapshot(job)
     job.status = "final"
     job.signed_off_by = user.id
