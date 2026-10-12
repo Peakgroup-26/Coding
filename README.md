@@ -2,7 +2,7 @@
 
 A web app for Peak Plumbing & Gas Services that turns commercial hydraulic drawings into measured, staged quantities, and later a priced estimate. It follows the build brief "Hydraulic Take-off & Estimating System — Build Brief for Codex".
 
-**Status: Phases 1 (core take-off), 2 (rules, staging, check-measure), 3 (pricing) and 4 (AI assistance) are built.** Phase 5 is still to come (see below).
+**Status: all five phases in the brief are built:** core take-off, rules and check-measure, pricing, AI assistance, and polish. They have been tested on generated drawings; tuning against Peak's real drawings and data comes next (see "Before going live").
 
 ## What Phase 1 does
 
@@ -82,80 +82,6 @@ A web app for Peak Plumbing & Gas Services that turns commercial hydraulic drawi
 
 Drainage runs are traced **in the direction of flow**. The viewer shows flow arrows, and the run editor has a *Reverse direction* button. Size-jump checks rely on this.
 
-The Phase 1 acceptance criteria from the brief are automated tests in `backend/tests/test_phase1_acceptance.py`:
-
-- A 40-page PDF splits correctly.
-- A test line measures within ±0.5%.
-- A check that is more than 1% out blocks measuring.
-- Export totals equal on-screen totals.
-
-## Running it
-
-You need Python 3.11+ and Node 18+.
-
-```bash
-# Backend
-cd backend
-pip install -r requirements.txt
-python -m pytest                 # run the tests
-SECRET_KEY=some-long-random-string \
-ADMIN_EMAIL=you@peakpcg.com.au ADMIN_PASSWORD='choose-a-password' \
-python -m uvicorn app.main:app --port 8000
-
-# Frontend (development, with hot reload; proxies /api to :8000)
-cd frontend
-npm install
-npm run dev                      # open http://localhost:5173
-```
-
-For a single server, run `npm run build` in `frontend/`. The backend then serves the built app at http://localhost:8000.
-
-If you don't set them, the first admin account is `admin@peak.local` / `changeme`. Change it straight away.
-
-### Settings (environment variables)
-
-| Variable | Default | Notes |
-|---|---|---|
-| `DATABASE_URL` | SQLite file in `backend/data/` | Use `postgresql+psycopg://user:pass@host/db` in production |
-| `STORAGE_DIR` | `backend/data/files` | Private file store for drawings and renders |
-| `SECRET_KEY` | random per start | **Set this**, or everyone is signed out on every restart |
-| `ADMIN_EMAIL` / `ADMIN_PASSWORD` | `admin@peak.local` / `changeme` | First admin account, created only when there are no users |
-| `MAX_UPLOAD_MB` | 200 | |
-| `CORS_ORIGINS` | `http://localhost:5173` | |
-| `TAKEOFF_AI` | off | `claude` turns on AI sheet reading (needs `ANTHROPIC_API_KEY`). Drawings are sent to Anthropic's API when used |
-| `TAKEOFF_AI_MODEL` | `claude-opus-5-5` | Model for AI sheet reading |
-
-## Viewer shortcuts
-
-| Key | Action |
-|---|---|
-| T | Trace a run (click points; double-click or Enter finishes; Backspace removes the last point) |
-| N | Count |
-| R | Riser or drop |
-| K | Calibrate |
-| H / Esc | Pan and select |
-| `[` / `]` | Previous or next service |
-| S | Snap on or off |
-| F | Fit sheet |
-| Shift | Lock to 45° while tracing |
-| Space + drag | Pan |
-| Del | Delete the selected item |
-
-## Layout
-
-```
-backend/app/
-  scale.py           scale maths (page size, stated scale, calibration, verification)
-  titleblock.py      title-block reading, classification, revision ordering
-  pdf_processing.py  page split, render, text and vector extraction
-  takeoff.py         measuring rules, verticals, waste, totals
-  export.py          Excel BOQ
-  routers/           HTTP API
-backend/tests/       unit and acceptance tests
-frontend/src/        React + TypeScript app (Konva canvas for the take-off overlay)
-DECISIONS.md         assumptions and choices made where the brief left room
-```
-
 ## What Phase 3 adds
 
 - **Price books (versions):**
@@ -202,6 +128,138 @@ Everything here only *suggests*. Suggestions are drawn dashed, labelled, and sta
   - Each sheet shows how many suggestions were accepted as is, edited then accepted, rejected, or still pending.
   - Classification accuracy compares the first proposal (keywords, remembered, or AI) with what people confirmed, against the brief's 90% target. The test set is every confirmed sheet.
 
+## What Phase 5 adds
+
+- **Revision compare.** Upload Rev B; Rev A drops out of the totals. On Rev B, *Compare with Rev A* shows:
+  - added line work (green) and removed line work (red), with each changed area boxed so you can step through them
+  - runs measured on Rev A that sit on changed line work
+  - new line work that isn't measured yet
+
+  Vector sheets are compared line by line, per colour. Scanned sheets fall back to an image comparison.
+- **Carry forward.** After verifying Rev B's scale (scales are never copied), bring Rev A's runs and counts across as suggestions to review. Ones on changed line work are noted.
+- **Marked-up PDF** from the job page:
+  - a cover page with job totals
+  - each measured sheet with its runs (solid = confirmed, dashed = suggested), counts, DN and length labels, and a legend with that sheet's totals
+- **Keyboard shortcuts help:** press `?` in the viewer.
+- **Microsoft 365 sign-on** (Entra ID, OpenID Connect with PKCE). Set `SSO_TENANT_ID`, `SSO_CLIENT_ID`, `SSO_CLIENT_SECRET` and `SSO_REDIRECT_URI` (`https://<your host>/api/auth/sso/callback`).
+  - Optionally restrict to `SSO_ALLOWED_DOMAINS=peakpcg.com.au`.
+  - By default people must already have an account (an admin adds them by email), so roles stay controlled. `SSO_AUTO_CREATE=true` creates estimators instead.
+  - Email and password sign-in keeps working alongside it.
+
+## Before going live
+
+- **Run it on real drawings.** Run three of Peak's completed jobs end to end and record the variance per service: this is the brief's golden-job test, using the *Compare with a completed job* panel. Tune title-block reading, connection tolerances and the line-style chaining on real consultant sheets.
+- **Load Peak's data:**
+  - fitting and sundry rules (`docs/fitting-rules-template.csv`)
+  - the price book, from the Simpro exports
+  - waste % per material
+  - benchmarks
+- **Match the Simpro CSV layout** to Peak's actual Simpro import.
+- **Production setup:**
+  - PostgreSQL, with Alembic migrations added before the first deploy
+  - S3-compatible private storage in AWS Sydney
+  - HTTPS
+  - a fixed `SECRET_KEY`
+  - backups
+  - a background queue if uploads of large sets are slow
+- **Have a developer review the code and hosting,** as the brief recommends.
+
+Peak's inputs (the brief's "Inputs Peak must supply") are needed now, especially the fitting and sundry rules, the Simpro prebuild export, the rates, and three completed jobs for the golden-job test.
+
+## Running it
+
+You need Python 3.11+ and Node 18+.
+
+```bash
+# Backend
+cd backend
+pip install -r requirements.txt
+python -m pytest                 # run the tests
+SECRET_KEY=some-long-random-string \
+ADMIN_EMAIL=you@peakpcg.com.au ADMIN_PASSWORD='choose-a-password' \
+python -m uvicorn app.main:app --port 8000
+
+# Frontend (development, with hot reload; proxies /api to :8000)
+cd frontend
+npm install
+npm run dev                      # open http://localhost:5173
+```
+
+For a single server, run `npm run build` in `frontend/`. The backend then serves the built app at http://localhost:8000.
+
+If you don't set them, the first admin account is `admin@peak.local` / `changeme`. Change it straight away.
+
+### Settings (environment variables)
+
+| Variable | Default | Notes |
+|---|---|---|
+| `DATABASE_URL` | SQLite file in `backend/data/` | Use `postgresql+psycopg://user:pass@host/db` in production |
+| `STORAGE_DIR` | `backend/data/files` | Private file store for drawings and renders |
+| `SECRET_KEY` | random per start | **Set this**, or everyone is signed out on every restart |
+| `ADMIN_EMAIL` / `ADMIN_PASSWORD` | `admin@peak.local` / `changeme` | First admin account, created only when there are no users |
+| `MAX_UPLOAD_MB` | 200 | |
+| `CORS_ORIGINS` | `http://localhost:5173` | |
+| `TAKEOFF_AI` | off | `claude` turns on AI sheet reading (needs `ANTHROPIC_API_KEY`). Drawings are sent to Anthropic's API when used |
+| `TAKEOFF_AI_MODEL` | `claude-opus-5-5` | Model for AI sheet reading |
+| `SSO_TENANT_ID` / `SSO_CLIENT_ID` / `SSO_CLIENT_SECRET` | off | Microsoft 365 sign-on (all three turn it on) |
+| `SSO_REDIRECT_URI` | `http://localhost:8000/api/auth/sso/callback` | Must match the app registration in Entra ID |
+| `SSO_ALLOWED_DOMAINS` | any | e.g. `peakpcg.com.au` |
+| `SSO_AUTO_CREATE` | off | Create unknown users as estimators |
+
+## Viewer shortcuts
+
+| Key | Action |
+|---|---|
+| T | Trace a run (click points; double-click or Enter finishes; Backspace removes the last point) |
+| N | Count |
+| R | Riser or drop |
+| K | Calibrate |
+| H / Esc | Pan and select |
+| `[` / `]` | Previous or next service |
+| S | Snap on or off |
+| F | Fit sheet |
+| Shift | Lock to 45° while tracing |
+| Space + drag | Pan |
+| Del | Delete the selected item |
+| ? | Show all shortcuts |
+
+## Layout
+
+```
+backend/app/
+  scale.py            scale maths (page size, stated scale, calibration, verification)
+  titleblock.py       title-block reading, classification, revision ordering
+  pdf_processing.py   page split, render, text and vector extraction
+  takeoff.py          measuring rules, verticals, waste, totals
+  rules.py, expr.py   fittings and sundries rules engine, safe formulas
+  geometry.py         connections, bends, branches, overlaps
+  checks.py           check-measure
+  pricing.py          price books, mappings, cost, margin, GST
+  pricebook_import.py CSV/Excel price list, prebuild and rate import
+  simpro.py           Simpro CSV
+  ai.py, suggest.py   AI sheet reading; line-style and symbol suggestions
+  revision.py         revision compare
+  markup.py           marked-up PDF
+  sso.py              Microsoft 365 sign-on
+  export.py           Excel BOQ
+  routers/            HTTP API
+backend/tests/        unit and acceptance tests
+frontend/src/         React + TypeScript app (Konva canvas for the take-off overlay)
+docs/                 fitting rules template, sample price book
+DECISIONS.md          assumptions and choices made where the brief left room
+```
+
+## Tests
+
+`cd backend && python -m pytest` runs every phase's acceptance criteria from the brief as automated tests.
+
+Phase 1's are tested in `backend/tests/test_phase1_acceptance.py`:
+
+- A 40-page PDF splits correctly.
+- A test line measures within ±0.5%.
+- A check that is more than 1% out blocks measuring.
+- Export totals equal on-screen totals.
+
 Phase 2's acceptance criteria are tested in `backend/tests/test_phase2_rules.py` and `test_phase2_checks.py`:
 
 - Every generated item traces to its rule and its source.
@@ -221,8 +279,9 @@ Phase 4's are tested in `test_phase4_ai.py`:
 
 The 90% classification target can only be checked on Peak's own drawings.
 
-## Next phases (from the brief)
+Phase 5's are tested in `test_phase5_polish.py`:
 
-5. Revision compare, marked-up PDF export, Microsoft 365 single sign-on
-
-Peak's inputs (the brief's "Inputs Peak must supply") are needed now, especially the fitting and sundry rules, the Simpro prebuild export, the rates, and three completed jobs for the golden-job test.
+- Revision compare highlights the added and removed runs between two revisions of a test sheet.
+- Carry-forward works.
+- The marked-up PDF is produced.
+- Sign-on handles both the successful and the refused cases.

@@ -55,6 +55,9 @@ export default function JobPage() {
         <button onClick={() => download(`/api/jobs/${job.id}/export.xlsx`, "BOQ.xlsx").catch((e) => setError(e.message))}>
           Export Excel BOQ
         </button>
+        <button onClick={() => download(`/api/jobs/${job.id}/markup.pdf`, "markup.pdf").catch((e) => setError(e.message))}>
+          Marked-up PDF
+        </button>
       </div>
       {final && <p className="banner-inline">This estimate is final and locked. A reviewer can reopen it.</p>}
       {error && <p className="error">{error}</p>}

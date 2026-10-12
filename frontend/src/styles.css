@@ -154,3 +154,15 @@ ul.items.styles li { flex-wrap: wrap; cursor: default; }
 .style-assign { display: flex; gap: 4px; flex-basis: 100%; padding-left: 22px; }
 .style-assign select { max-width: 120px; }
 .ai-stats { border-top: 1px solid var(--line); margin-top: 10px; padding-top: 4px; }
+
+/* Phase 5 */
+.or { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
+.or::before, .or::after { content: ""; flex: 1; border-top: 1px solid var(--line); }
+a.button.ms { text-align: center; background: #2f2f2f; color: #fff; border-color: #2f2f2f; }
+a.button.ms:hover { text-decoration: none; background: #111; }
+.compare-legend { display: flex; gap: 10px; align-items: center; font-size: 12px; }
+.compare-legend .add { color: #1f8a43; font-weight: 600; }
+.compare-legend .rem { color: var(--bad); font-weight: 600; }
+.help-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.35); display: grid; place-items: center; z-index: 50; }
+.help-overlay .card { max-width: 520px; width: calc(100% - 32px); }
+.help-overlay kbd { display: inline-block; min-width: 22px; padding: 1px 6px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; background: #f6f8fb; font-size: 12px; text-align: center; }
