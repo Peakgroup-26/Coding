@@ -74,6 +74,7 @@ class MaterialOut(ORM, MaterialIn):
 class CountTypeIn(BaseModel):
     name: str
     default_service_id: int | None = None
+    default_stage_id: int | None = None
     is_fixture: bool = False
     active: bool = True
 

@@ -78,7 +78,9 @@ def seed(db: Session) -> None:
 
     if not db.scalar(select(CountType.id).limit(1)):
         for name, svc, fixture in COUNT_TYPES:
-            db.add(CountType(name=name, default_service_id=services.get(svc), is_fixture=fixture))
+            # Fixtures go in at fit-off; other items take their service's default stage.
+            db.add(CountType(name=name, default_service_id=services.get(svc), is_fixture=fixture,
+                             default_stage_id=stages.get("Fit-off") if fixture else None))
 
     if not db.scalar(select(User.id).limit(1)):
         db.add(User(email=config.ADMIN_EMAIL.lower(), name="Admin", role="admin", password_hash=hash_password(config.ADMIN_PASSWORD)))

@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from ..audit import record, snapshot
 from ..auth import current_user
 from ..db import get_db
-from ..models import CountItem, Level, Material, Run, Service, Sheet, Stage, User
+from ..models import CountItem, CountType, Level, Material, Run, Service, Sheet, Stage, User
 from ..schemas import CountIn, CountOut, CountPatch, RunIn, RunOut, RunPatch
 from ..takeoff import recompute_run, resolve_scale
 from . import get_or_404
@@ -120,7 +120,8 @@ def create_count(sheet_id: int, body: CountIn, db: Session = Depends(get_db), us
     if not (0 <= data["x"] <= sheet.width_pt and 0 <= data["y"] <= sheet.height_pt):
         raise HTTPException(422, "Point is outside the sheet")
     if data["stage_id"] is None:
-        data["stage_id"] = db.get(Service, data["service_id"]).default_stage_id
+        ct = db.scalar(select(CountType).where(CountType.name == data["item_type"]))
+        data["stage_id"] = (ct.default_stage_id if ct else None) or db.get(Service, data["service_id"]).default_stage_id
     item = CountItem(job_id=sheet.job_id, sheet_id=sheet.id, source="manual", created_by=user.id, **data)
     db.add(item)
     db.flush()

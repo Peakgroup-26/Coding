@@ -3,7 +3,7 @@ read the title block and propose a classification."""
 import json
 import logging
 
-import fitz  # PyMuPDF
+import pymupdf as fitz
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -60,7 +60,7 @@ def _snap_points(page: fitz.Page) -> list[list[float]]:
                 continue
             for p in pts:
                 q = fitz.Point(p) * mat
-                key = (round(q.x * 2) / 2, round(q.y * 2) / 2)
+                key = (round(q.x, 2), round(q.y, 2))
                 if key not in seen:
                     seen.add(key)
                     out.append([key[0], key[1]])

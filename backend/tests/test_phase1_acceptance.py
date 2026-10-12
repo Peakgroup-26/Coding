@@ -193,7 +193,7 @@ def test_verticals_waste_counts_and_export_matches_screen(client):
     assert by[32]["total_m"] == pytest.approx(7.35)  # 7.0 + 0.35
     assert t["grand_total_m"] == pytest.approx(20.69)
     assert t["excluded"] == {"suggested_runs": 1, "suggested_counts": 1, "superseded_runs": 0}
-    assert t["counts"] == [{"service_code": "SAN", "item_type": "WC", "stage": "Under slab", "qty": 4}]
+    assert t["counts"] == [{"service_code": "SAN", "item_type": "WC", "stage": "Fit-off", "qty": 4}]
 
     r = client.get(f"/api/jobs/{jid}/export.xlsx")
     assert r.status_code == 200

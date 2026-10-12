@@ -59,6 +59,7 @@ class CountType(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(100), unique=True)
     default_service_id: Mapped[int | None] = mapped_column(ForeignKey("services.id"), nullable=True)
+    default_stage_id: Mapped[int | None] = mapped_column(ForeignKey("stages.id"), nullable=True)
     is_fixture: Mapped[bool] = mapped_column(Boolean, default=False)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
 
