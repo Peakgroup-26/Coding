@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from ..audit import record, snapshot
 from ..auth import current_user
 from ..db import get_db
-from ..models import CountItem, CountType, Level, Material, Run, Service, Sheet, Stage, User
+from ..models import AiOutcome, CountItem, CountType, Level, Material, Run, Service, Sheet, Stage, User
 from ..schemas import CountIn, CountOut, CountPatch, RunIn, RunOut, RunPatch
 from ..takeoff import recompute_run, resolve_scale
 from . import ensure_open, get_or_404
@@ -42,6 +42,22 @@ def _ensure_editable(sheet: Sheet, db: Session):
     ensure_open(db, sheet.job_id)
     if not sheet.is_current:
         raise HTTPException(409, "This sheet has been superseded by a later revision. Measure on the current one.")
+
+
+def _track_suggestion(db: Session, obj, kind: str, data: dict, before: dict) -> None:
+    """Note whether an AI suggestion was edited before it was confirmed, and record the outcome."""
+    if obj.source != "ai" or obj.status != "suggested":
+        return
+    changed = any(k != "status" and before.get(k) != (list(map(list, v)) if k == "geometry" else v) for k, v in data.items())
+    if changed:
+        obj.ai_edited = True
+    if data.get("status") == "confirmed":
+        db.add(AiOutcome(job_id=obj.job_id, sheet_id=obj.sheet_id, kind=kind, outcome="edited" if obj.ai_edited else "accepted"))
+
+
+def _track_rejection(db: Session, obj, kind: str) -> None:
+    if obj.source == "ai" and obj.status == "suggested":
+        db.add(AiOutcome(job_id=obj.job_id, sheet_id=obj.sheet_id, kind=kind, outcome="rejected"))
 
 
 # --- runs ---
@@ -90,6 +106,7 @@ def update_run(run_id: int, body: RunPatch, db: Session = Depends(get_db), user:
         data["geometry"] = [list(p) for p in data["geometry"]]
     if "material" in data and "waste_pct" not in data:
         data["waste_pct"] = _waste_for(db, data["material"])
+    _track_suggestion(db, run, "run", data, before)
     for k, v in data.items():
         setattr(run, k, v)
     recompute_run(db, run)
@@ -102,6 +119,7 @@ def update_run(run_id: int, body: RunPatch, db: Session = Depends(get_db), user:
 def delete_run(run_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
     run = get_or_404(db, Run, run_id)
     ensure_open(db, run.job_id)
+    _track_rejection(db, run, "run")
     record(db, user.id, "run", run.id, "delete", before=snapshot(run))
     db.delete(run)
     db.commit()
@@ -144,6 +162,7 @@ def update_count(count_id: int, body: CountPatch, db: Session = Depends(get_db),
     data = body.model_dump(exclude_unset=True)
     _check_refs(db, item.job_id, data)
     before = snapshot(item)
+    _track_suggestion(db, item, "count", data, before)
     for k, v in data.items():
         setattr(item, k, v)
     record(db, user.id, "count", item.id, "update", before, snapshot(item))
@@ -155,6 +174,7 @@ def update_count(count_id: int, body: CountPatch, db: Session = Depends(get_db),
 def delete_count(count_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
     item = get_or_404(db, CountItem, count_id)
     ensure_open(db, item.job_id)
+    _track_rejection(db, item, "count")
     record(db, user.id, "count", item.id, "delete", before=snapshot(item))
     db.delete(item)
     db.commit()

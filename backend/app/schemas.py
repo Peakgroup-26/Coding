@@ -181,6 +181,8 @@ class SheetOut(ORM):
     is_hydraulic: bool
     confidence: float
     confirmed: bool
+    proposed: dict | None = None
+    ai_reading: dict | None = None
     is_current: bool
     is_duplicate: bool
     viewports: list[ViewportOut] = []
@@ -279,6 +281,7 @@ class RunOut(ORM):
     waste_pct: float
     status: str
     source: str
+    ai_edited: bool = False
     note: str
 
 
@@ -317,6 +320,7 @@ class CountOut(ORM):
     location_tag: str
     status: str
     source: str
+    ai_edited: bool = False
 
 
 # --- Phase 2: rules, generated items, check-measure ---

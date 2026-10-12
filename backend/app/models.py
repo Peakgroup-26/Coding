@@ -150,6 +150,9 @@ class Sheet(Base):
     is_hydraulic: Mapped[bool] = mapped_column(Boolean, default=True)
     confidence: Mapped[float] = mapped_column(Float, default=0.0)
     confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
+    # The first proposal (keyword or AI), kept to measure classification accuracy against what users confirm.
+    proposed: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    ai_reading: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # last AI read, incl. legend
 
     is_current: Mapped[bool] = mapped_column(Boolean, default=True)
     is_duplicate: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -223,6 +226,7 @@ class Run(Base):
     waste_pct: Mapped[float] = mapped_column(Float, default=0.0)
     status: Mapped[str] = mapped_column(String(20), default="confirmed")  # suggested | confirmed
     source: Mapped[str] = mapped_column(String(20), default="manual")  # manual | ai
+    ai_edited: Mapped[bool] = mapped_column(Boolean, default=False)  # a suggestion changed before it was confirmed
     note: Mapped[str] = mapped_column(Text, default="")
     created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
@@ -242,6 +246,7 @@ class CountItem(Base):
     location_tag: Mapped[str] = mapped_column(String(200), default="")
     status: Mapped[str] = mapped_column(String(20), default="confirmed")
     source: Mapped[str] = mapped_column(String(20), default="manual")
+    ai_edited: Mapped[bool] = mapped_column(Boolean, default=False)
     created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
@@ -447,3 +452,27 @@ class AppSetting(Base):
     __tablename__ = "app_settings"
     key: Mapped[str] = mapped_column(String(100), primary_key=True)
     value: Mapped[dict | list | None] = mapped_column(JSON, nullable=True)
+
+
+# --- Phase 4: AI assistance ---
+class StyleMapping(Base):
+    """A drawing line style (colour, dashes, width, layer) assigned to a service, size and material,
+    remembered per client (consultants tend to reuse their CAD styles)."""
+    __tablename__ = "style_mappings"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    client: Mapped[str] = mapped_column(String(255), index=True)
+    style_key: Mapped[str] = mapped_column(String(300))
+    service_id: Mapped[int] = mapped_column(ForeignKey("services.id"))
+    dn: Mapped[int] = mapped_column(Integer)
+    material: Mapped[str] = mapped_column(String(100))
+
+
+class AiOutcome(Base):
+    """What happened to each suggestion: accepted as is, edited then accepted, or rejected."""
+    __tablename__ = "ai_outcomes"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id", ondelete="CASCADE"), index=True)
+    sheet_id: Mapped[int | None] = mapped_column(ForeignKey("sheets.id", ondelete="CASCADE"), nullable=True)
+    kind: Mapped[str] = mapped_column(String(10))  # run | count
+    outcome: Mapped[str] = mapped_column(String(10))  # accepted | edited | rejected
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
