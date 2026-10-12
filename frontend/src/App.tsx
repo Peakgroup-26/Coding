@@ -8,6 +8,8 @@ import JobPage from "./pages/Job";
 import SheetViewer from "./pages/SheetViewer";
 import Admin from "./pages/Admin";
 import Rules from "./pages/Rules";
+import PriceBooks from "./pages/PriceBooks";
+import Mappings from "./pages/Mappings";
 
 interface Ctx { user: User; settings: Settings; reloadSettings: () => Promise<void> }
 const AppCtx = createContext<Ctx | null>(null);
@@ -48,6 +50,8 @@ export default function App() {
           <nav>
             <Link to="/">Jobs</Link>
             <Link to="/rules">Rules</Link>
+            <Link to="/price-books">Price books</Link>
+            <Link to="/mappings">Mappings</Link>
             {user.role === "admin" && <Link to="/admin">Admin</Link>}
           </nav>
           <span className="spacer" />
@@ -59,6 +63,8 @@ export default function App() {
           <Route path="/jobs/:jobId" element={<JobPage />} />
           <Route path="/sheets/:sheetId" element={<SheetViewer />} />
           <Route path="/rules" element={<Rules />} />
+          <Route path="/price-books" element={<PriceBooks />} />
+          <Route path="/mappings" element={<Mappings />} />
           <Route path="/admin" element={user.role === "admin" ? <Admin /> : <Navigate to="/" />} />
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>

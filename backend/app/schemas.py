@@ -112,6 +112,13 @@ class JobOut(ORM, JobIn):
     signed_off_by: int | None = None
     signed_off_at: datetime | None = None
     checks_run_at: datetime | None = None
+    price_book_version_id: int | None = None
+    margin_basis: str = "markup"
+    default_margin_pct: float = 0.0
+    service_margins: dict | None = None
+    stage_margins: dict | None = None
+    gst_pct: float = 10.0
+    reference_total_ex_gst: float | None = None
 
 
 class FileOut(ORM):
