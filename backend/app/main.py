@@ -7,7 +7,8 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import config
-from .db import Base, SessionLocal, engine
+from .db import SessionLocal, engine
+from .migrate import migrate
 from .routers import ai, auth_users, estimate, jobs, polish, pricing, rules, settings, sheets, takeoff
 from .seed import seed
 
@@ -18,7 +19,7 @@ FRONTEND_DIST = config.BASE_DIR.parent / "frontend" / "dist"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    Base.metadata.create_all(engine)
+    migrate(engine)
     with SessionLocal() as db:
         seed(db)
     yield

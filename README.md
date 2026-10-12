@@ -155,13 +155,14 @@ Everything here only *suggests*. Suggestions are drawn dashed, labelled, and sta
   - waste % per material
   - benchmarks
 - **Match the Simpro CSV layout** to Peak's actual Simpro import.
-- **Production setup:**
-  - PostgreSQL, with Alembic migrations added before the first deploy
-  - S3-compatible private storage in AWS Sydney
-  - HTTPS
+- **Production setup.** These are built and tested, but still need choosing and setting up:
+  - hosting
+  - HTTPS in front of the app
+  - PostgreSQL backups
+  - the S3 bucket and its credentials
   - a fixed `SECRET_KEY`
-  - backups
-  - a background queue if uploads of large sets are slow
+
+  A background queue for very large uploads is still to do if they turn out slow.
 - **Have a developer review the code and hosting,** as the brief recommends.
 
 Peak's inputs (the brief's "Inputs Peak must supply") are needed now, especially the fitting and sundry rules, the Simpro prebuild export, the rates, and three completed jobs for the golden-job test.
@@ -187,6 +188,25 @@ npm run dev                      # open http://localhost:5173
 
 For a single server, run `npm run build` in `frontend/`. The backend then serves the built app at http://localhost:8000.
 
+### With Docker (production-style)
+
+```bash
+cp .env.example .env      # fill in SECRET_KEY, POSTGRES_PASSWORD, ADMIN_EMAIL, ADMIN_PASSWORD
+docker compose up --build -d
+```
+
+This runs the app (API plus built frontend, as a non-root user) and PostgreSQL 16. Drawings go in the `files` volume, or in S3 with `STORAGE_BACKEND=s3`. Put HTTPS in front of it.
+
+### Database migrations
+
+The app applies Alembic migrations automatically on startup. After changing `app/models.py`, generate a migration:
+
+```bash
+cd backend && alembic revision --autogenerate -m "what changed"
+```
+
+`tests/test_migrations.py` fails if the models and migrations disagree. Development databases made before migrations existed are adopted only if they already match; otherwise delete `backend/data/`.
+
 If you don't set them, the first admin account is `admin@peak.local` / `changeme`. Change it straight away.
 
 ### Settings (environment variables)
@@ -194,7 +214,10 @@ If you don't set them, the first admin account is `admin@peak.local` / `changeme
 | Variable | Default | Notes |
 |---|---|---|
 | `DATABASE_URL` | SQLite file in `backend/data/` | Use `postgresql+psycopg://user:pass@host/db` in production |
-| `STORAGE_DIR` | `backend/data/files` | Private file store for drawings and renders |
+| `STORAGE_DIR` | `backend/data/files` | Private file store for drawings and renders (the cache when using S3) |
+| `STORAGE_BACKEND` | `local` | `s3` keeps files in a private, encrypted bucket |
+| `S3_BUCKET` / `S3_PREFIX` / `AWS_REGION` | – / `takeoff` / `ap-southeast-2` | AWS credentials come from the usual `AWS_*` variables or an instance role |
+| `S3_ENDPOINT_URL` | – | For S3-compatible storage other than AWS |
 | `SECRET_KEY` | random per start | **Set this**, or everyone is signed out on every restart |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | `admin@peak.local` / `changeme` | First admin account, created only when there are no users |
 | `MAX_UPLOAD_MB` | 200 | |
@@ -241,6 +264,9 @@ backend/app/
   revision.py         revision compare
   markup.py           marked-up PDF
   sso.py              Microsoft 365 sign-on
+  storage.py          local or S3 file storage
+  migrate.py          applies database migrations on startup
+backend/migrations/   Alembic migrations
   export.py           Excel BOQ
   routers/            HTTP API
 backend/tests/        unit and acceptance tests
@@ -251,7 +277,11 @@ DECISIONS.md          assumptions and choices made where the brief left room
 
 ## Tests
 
-`cd backend && python -m pytest` runs every phase's acceptance criteria from the brief as automated tests.
+`cd backend && pip install -r requirements-dev.txt && python -m pytest` runs every phase's acceptance criteria from the brief as automated tests. Set `TEST_DATABASE_URL=postgresql+psycopg://…` to run them against PostgreSQL. GitHub Actions (`.github/workflows/ci.yml`) runs these on every pull request:
+
+- lint
+- the tests on SQLite and on PostgreSQL 16
+- the frontend typecheck and build
 
 Phase 1's are tested in `backend/tests/test_phase1_acceptance.py`:
 

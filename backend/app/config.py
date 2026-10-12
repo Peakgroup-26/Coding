@@ -19,6 +19,15 @@ ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "changeme")
 
 MAX_UPLOAD_BYTES = int(os.environ.get("MAX_UPLOAD_MB", "200")) * 1024 * 1024
 
+# File storage backend: "local" (STORAGE_DIR) or "s3" (private bucket, STORAGE_DIR as cache)
+STORAGE_BACKEND = os.environ.get("STORAGE_BACKEND", "local").lower()
+S3_BUCKET = os.environ.get("S3_BUCKET", "")
+S3_PREFIX = os.environ.get("S3_PREFIX", "takeoff")
+AWS_REGION = os.environ.get("AWS_REGION", "ap-southeast-2")  # Sydney, for data residency
+S3_ENDPOINT_URL = os.environ.get("S3_ENDPOINT_URL") or None  # for S3-compatible services
+if STORAGE_BACKEND == "s3" and not S3_BUCKET:
+    raise RuntimeError("STORAGE_BACKEND=s3 needs S3_BUCKET")
+
 # Longest side of the rendered sheet image in pixels.
 RENDER_MAX_PX = int(os.environ.get("RENDER_MAX_PX", "5000"))
 

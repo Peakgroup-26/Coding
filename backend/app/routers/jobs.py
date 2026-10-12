@@ -77,18 +77,19 @@ async def upload_files(
         safe = re.sub(r"[^A-Za-z0-9._-]", "_", name)[-120:]
         key = f"jobs/{job.id}/originals/{uuid.uuid4().hex}-{safe}"
         size = 0
-        with open(storage.local_path(key), "wb") as out:
+        with open(storage.writable_path(key), "wb") as out:
             while chunk := await up.read(1024 * 1024):
                 size += len(chunk)
                 if size > config.MAX_UPLOAD_BYTES:
                     out.close()
-                    storage.local_path(key).unlink(missing_ok=True)
+                    storage.writable_path(key).unlink(missing_ok=True)
                     raise HTTPException(413, f"{name} is larger than {config.MAX_UPLOAD_BYTES // (1024 * 1024)} MB")
                 out.write(chunk)
-        with open(storage.local_path(key), "rb") as f:
+        with open(storage.writable_path(key), "rb") as f:
             if f.read(5) != b"%PDF-":
-                storage.local_path(key).unlink(missing_ok=True)
+                storage.writable_path(key).unlink(missing_ok=True)
                 raise HTTPException(422, f"{name} is not a valid PDF")
+        storage.commit(key)
         drawing = DrawingFile(job_id=job.id, filename=name, storage_key=key, uploaded_by=user.id)
         db.add(drawing)
         db.flush()
