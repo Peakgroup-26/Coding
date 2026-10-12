@@ -4,44 +4,70 @@ import { api, download } from "../api";
 import { useApp } from "../App";
 import type { Job, Level, Sheet, Totals } from "../types";
 import { fmtM } from "../util";
+import { Audit, Checks, Fittings, StageMatrixView } from "./Estimate";
 
 const SHEET_TYPES = ["plan", "section", "detail", "schematic", "legend", "cover", "other"];
 
+type Tab = "sheets" | "levels" | "totals" | "fittings" | "checks" | "audit";
+const TABS: [Tab, string][] = [
+  ["sheets", "Sheet register"], ["levels", "Levels"], ["totals", "Totals"],
+  ["fittings", "Fittings & sundries"], ["checks", "Check-measure"], ["audit", "Audit log"],
+];
+
 export default function JobPage() {
   const { jobId } = useParams();
+  const { user } = useApp();
   const [job, setJob] = useState<Job | null>(null);
-  const [tab, setTab] = useState<"sheets" | "levels" | "totals">("sheets");
+  const [tab, setTab] = useState<Tab>("sheets");
   const [error, setError] = useState("");
 
-  useEffect(() => { api.get<Job>(`/api/jobs/${jobId}`).then(setJob); }, [jobId]);
+  const loadJob = useCallback(() => api.get<Job>(`/api/jobs/${jobId}`).then(setJob), [jobId]);
+  useEffect(() => { loadJob(); }, [loadJob]);
   if (!job) return null;
+
+  const final = job.status === "final";
+  const canSignOff = user.role === "reviewer" || user.role === "admin";
+  const signOff = async () => {
+    setError("");
+    try { setJob(await api.post<Job>(`/api/jobs/${job.id}/finalise`)); }
+    catch (e) { setError((e as Error).message); setTab("checks"); }
+  };
+  const reopen = async () => {
+    if (!window.confirm("Reopen this estimate for changes? The sign-off will be cleared.")) return;
+    try { setJob(await api.post<Job>(`/api/jobs/${job.id}/reopen`)); } catch (e) { setError((e as Error).message); }
+  };
 
   return (
     <main className="page">
       <div className="row">
         <div>
-          <h1>{job.name}</h1>
+          <h1>{job.name} {final && <span className="badge ok">Final</span>}</h1>
           <p className="muted">
             {[job.quote_no && `Quote ${job.quote_no}`, job.client, job.builder, job.address, job.due_date && `Due ${job.due_date}`]
               .filter(Boolean).join(" · ")}
+            {final && job.signed_off_at && ` · Signed off ${new Date(job.signed_off_at).toLocaleString("en-AU")}`}
           </p>
         </div>
         <span className="spacer" />
+        {canSignOff && !final && <button className="primary" onClick={signOff}>Sign off as final</button>}
+        {canSignOff && final && <button onClick={reopen}>Reopen</button>}
         <button onClick={() => download(`/api/jobs/${job.id}/export.xlsx`, "BOQ.xlsx").catch((e) => setError(e.message))}>
           Export Excel BOQ
         </button>
       </div>
+      {final && <p className="banner-inline">This estimate is final and locked. A reviewer can reopen it.</p>}
       {error && <p className="error">{error}</p>}
       <div className="tabs">
-        {(["sheets", "levels", "totals"] as const).map((t) => (
-          <button key={t} className={tab === t ? "active" : ""} onClick={() => setTab(t)}>
-            {t === "sheets" ? "Sheet register" : t === "levels" ? "Levels" : "Totals"}
-          </button>
+        {TABS.map(([t, label]) => (
+          <button key={t} className={tab === t ? "active" : ""} onClick={() => setTab(t)}>{label}</button>
         ))}
       </div>
       {tab === "sheets" && <SheetRegister jobId={job.id} />}
       {tab === "levels" && <Levels jobId={job.id} />}
-      {tab === "totals" && <TotalsView jobId={job.id} />}
+      {tab === "totals" && <><TotalsView jobId={job.id} /><StageMatrixView jobId={job.id} /></>}
+      {tab === "fittings" && <Fittings jobId={job.id} locked={final} />}
+      {tab === "checks" && <Checks jobId={job.id} onChange={loadJob} />}
+      {tab === "audit" && <Audit jobId={job.id} />}
     </main>
   );
 }

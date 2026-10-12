@@ -113,6 +113,11 @@ def sheet_counts(sheet_id: int, db: Session = Depends(get_db), _: User = Depends
     return db.scalars(select(CountItem).where(CountItem.sheet_id == sheet_id).order_by(CountItem.id)).all()
 
 
+@router.get("/jobs/{job_id}/counts", response_model=list[CountOut])
+def job_counts(job_id: int, db: Session = Depends(get_db), _: User = Depends(current_user)):
+    return db.scalars(select(CountItem).where(CountItem.job_id == job_id).order_by(CountItem.id)).all()
+
+
 @router.post("/sheets/{sheet_id}/counts", response_model=CountOut)
 def create_count(sheet_id: int, body: CountIn, db: Session = Depends(get_db), user: User = Depends(current_user)):
     sheet = get_or_404(db, Sheet, sheet_id)

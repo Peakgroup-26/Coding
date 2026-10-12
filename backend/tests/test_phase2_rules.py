@@ -150,3 +150,12 @@ def test_rules_csv_round_trip(client, drainage_job):
     assert body["created"] == 1 and len(body["errors"]) == 2, body
     rules = {x["name"]: x for x in client.get("/api/rules").json()}
     assert rules["T CSV bends 45"]["condition"]["angle_min"] == 22.5
+
+
+def test_shipped_template_imports_cleanly_and_inactive(client):
+    from pathlib import Path
+    data = (Path(__file__).resolve().parents[2] / "docs" / "fitting-rules-template.csv").read_bytes()
+    r = client.post("/api/rules/import", files={"file": ("template.csv", data, "text/csv")}).json()
+    assert r["errors"] == [] and r["created"] == 9, r
+    examples = [x for x in client.get("/api/rules").json() if x["name"].startswith("EXAMPLE")]
+    assert examples and not any(x["active"] for x in examples)

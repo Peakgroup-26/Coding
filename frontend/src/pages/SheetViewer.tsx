@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
-import { Circle, Group, Image as KImage, Layer, Line, Rect, Stage, Text } from "react-konva";
+import { Link, useParams, useSearchParams } from "react-router-dom";
+import { Arrow, Circle, Group, Image as KImage, Layer, Line, Rect, Stage, Text } from "react-konva";
 import type Konva from "konva";
 import { api, fetchBlobUrl } from "../api";
 import { useApp } from "../App";
-import type { CountItem, Level, Pt, Run, Service, Sheet, Totals, Viewport } from "../types";
+import type { CountItem, Flag, Job, Level, Pt, Run, Service, Sheet, Totals, Viewport } from "../types";
 import { SnapIndex, dist, fmtM, ortho, polyLength } from "../util";
 import { TotalsTables } from "./Job";
 
@@ -17,6 +17,10 @@ const COMMON_DN = [15, 20, 25, 32, 40, 50, 65, 80, 90, 100, 150, 225, 300];
 
 export default function SheetViewer() {
   const { sheetId } = useParams();
+  const [searchParams] = useSearchParams();
+  const [flags, setFlags] = useState<Flag[]>([]);
+  const [job, setJob] = useState<Job | null>(null);
+  const [pin, setPin] = useState<Pt | null>(null); // a location linked to from a flag
   const { settings } = useApp();
   const services = settings.services.filter((s) => s.active);
   const serviceById = useMemo(() => new Map(settings.services.map((s) => [s.id, s])), [settings.services]);
@@ -67,12 +71,15 @@ export default function SheetViewer() {
     return s;
   }, [sheetId]);
   const loadItems = useCallback(async (jobId: number) => {
-    const [r, c, t] = await Promise.all([
+    const [r, c, t, f, j] = await Promise.all([
       api.get<Run[]>(`/api/sheets/${sheetId}/runs`),
       api.get<CountItem[]>(`/api/sheets/${sheetId}/counts`),
       api.get<Totals>(`/api/jobs/${jobId}/totals`),
+      api.get<Flag[]>(`/api/jobs/${jobId}/flags`),
+      api.get<Job>(`/api/jobs/${jobId}`),
     ]);
-    setRuns(r); setCounts(c); setTotals(t);
+    setRuns(r); setCounts(c); setTotals(t); setJob(j);
+    setFlags(f.filter((x) => x.sheet_id === Number(sheetId) && x.status === "open"));
   }, [sheetId]);
 
   useEffect(() => {
@@ -106,6 +113,26 @@ export default function SheetViewer() {
   }, [sheet, size]);
   const fitted = useRef(false);
   useEffect(() => { if (sheet && size.w > 0 && !fitted.current) { fit(); fitted.current = true; } }, [sheet, size, fit]);
+
+  // Links from fittings lines and check-measure flags: ?run=12, ?count=5 or ?x=..&y=..
+  const linkHandled = useRef(false);
+  useEffect(() => {
+    if (linkHandled.current || !fitted.current || !sheet || !job) return;
+    const runId = Number(searchParams.get("run")), countId = Number(searchParams.get("count"));
+    const x = searchParams.get("x"), y = searchParams.get("y");
+    if (runId) {
+      const r = runs.find((v) => v.id === runId);
+      if (r) { setSelected({ kind: "run", id: r.id }); focusOn(r.geometry[0]); }
+    } else if (countId) {
+      const c = counts.find((v) => v.id === countId);
+      if (c) { setSelected({ kind: "count", id: c.id }); focusOn([c.x, c.y]); }
+    } else if (x !== null && y !== null) {
+      const p: Pt = [Number(x), Number(y)];
+      setPin(p);
+      focusOn(p);
+    }
+    linkHandled.current = true;
+  });
 
   const sheetVerified = !!sheet?.scale_verified;
   const service = serviceById.get(serviceId);
@@ -338,6 +365,7 @@ export default function SheetViewer() {
         </div>
       )}
       {sheet.calibration_data?.warning && <div className="banner warn">{sheet.calibration_data.warning}</div>}
+      {job?.status === "final" && <div className="banner warn">This estimate is final and locked. A reviewer can reopen it from the job page.</div>}
       {error && <div className="banner bad">{error}</div>}
 
       <div className="viewer-body">
@@ -375,6 +403,15 @@ export default function SheetViewer() {
                         lineCap="round" lineJoin="round" dash={r.status === "suggested" ? [8 / view.scale, 6 / view.scale] : undefined}
                         shadowColor={isSel ? "#ffeb3b" : undefined} shadowBlur={isSel ? 10 : 0} />
                     )}
+                    {(svc?.kind === "drainage" || svc?.kind === "stormwater") && r.geometry.slice(1).map((b, i) => {
+                      const a = r.geometry[i];
+                      const len = dist(a, b);
+                      if (len * view.scale < 30) return null;
+                      const ux = (b[0] - a[0]) / len, uy = (b[1] - a[1]) / len, mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2;
+                      const h = 7 / view.scale;
+                      return <Arrow key={i} points={[mx - ux * h, my - uy * h, mx + ux * h, my + uy * h]} fill={colour} stroke={colour}
+                        strokeWidth={2 / view.scale} pointerLength={7 / view.scale} pointerWidth={7 / view.scale} listening={false} />;
+                    })}
                     {r.vertical_m > 0 && (
                       <Circle x={r.geometry[0][0]} y={r.geometry[0][1]} radius={(isSel ? 8 : 6) / view.scale}
                         stroke={colour} strokeWidth={2 / view.scale} fill="#fff" />
@@ -393,6 +430,14 @@ export default function SheetViewer() {
                   </Group>
                 );
               })}
+              {flags.filter((f) => f.x !== null).map((f) => (
+                <Group key={`f${f.id}`} x={f.x!} y={f.y!} listening={false}>
+                  <Circle radius={11 / view.scale} stroke={f.severity === "error" ? "#c42b2b" : "#d08000"} strokeWidth={2.5 / view.scale} />
+                  <Text text="!" fontSize={13 / view.scale} fontStyle="bold" fill={f.severity === "error" ? "#c42b2b" : "#d08000"}
+                    x={-2.5 / view.scale} y={-6.5 / view.scale} />
+                </Group>
+              ))}
+              {pin && <Circle x={pin[0]} y={pin[1]} radius={18 / view.scale} stroke="#2f6fd6" strokeWidth={3 / view.scale} dash={[5 / view.scale, 4 / view.scale]} listening={false} />}
               {/* Draft geometry */}
               {draft.length > 0 && tool === "trace" && (
                 <Line points={[...draft, ...(cursor ? [cursor] : [])].flat()} stroke={service?.colour ?? "#000"} strokeWidth={3 / view.scale} dash={[6 / view.scale, 4 / view.scale]} listening={false} />
@@ -520,6 +565,20 @@ export default function SheetViewer() {
               {runs.length + counts.length === 0 && <li className="muted">Nothing measured yet.</li>}
             </ul>
           </section>
+
+          {flags.length > 0 && (
+            <section>
+              <h3>Open flags on this sheet</h3>
+              <ul className="items">
+                {flags.map((f) => (
+                  <li key={f.id} onClick={() => { if (f.x !== null) { setPin([f.x, f.y!]); focusOn([f.x, f.y!]); } }}>
+                    <span className={`badge ${f.severity === "error" ? "bad" : "warn"}`}>{f.severity}</span> {f.message}
+                  </li>
+                ))}
+              </ul>
+              <Link className="small" to={`/jobs/${sheet.job_id}`}>Resolve flags on the job's Check-measure tab</Link>
+            </section>
+          )}
 
           {totals && (
             <section>
@@ -660,6 +719,11 @@ function RunEditor({ run, levels, services, onSaved, onError, onDelete }: {
         {run.status === "suggested"
           ? <button className="primary" onClick={() => save({ status: "confirmed" })}>Confirm</button>
           : <span className="ok small">Confirmed</span>}
+        {run.geometry.length > 1 && (
+          <button title="Drainage is drawn in the direction of flow" onClick={() => save({ geometry: [...run.geometry].reverse() })}>
+            Reverse direction
+          </button>
+        )}
         <span className="spacer" />
         <button className="danger" onClick={onDelete}>Delete (Del)</button>
       </div>

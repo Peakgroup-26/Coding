@@ -205,4 +205,5 @@ def reopen(job_id: int, db: Session = Depends(get_db), user: User = Depends(requ
 def job_audit(job_id: int, limit: int = 200, db: Session = Depends(get_db), _: User = Depends(current_user)):
     """Changes to this job and everything in it, deleted items included."""
     q = select(AuditLog).where(AuditLog.job_id == job_id).order_by(AuditLog.id.desc()).limit(min(limit, 1000))
-    return db.scalars(q).all()
+    names = {u.id: u.name or u.email for u in db.scalars(select(User))}
+    return [AuditOut.model_validate(e).model_copy(update={"user_name": names.get(e.user_id, "")}) for e in db.scalars(q)]

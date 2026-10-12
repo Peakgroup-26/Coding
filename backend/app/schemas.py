@@ -437,6 +437,7 @@ class FlagPatch(BaseModel):
 class AuditOut(ORM):
     id: int
     user_id: int | None
+    user_name: str = ""
     entity: str
     entity_id: int
     action: str
