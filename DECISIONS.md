@@ -133,3 +133,15 @@ These are choices made where the brief left room, as it asks. Each one can be re
     - *Rejected* means deleted while suggested.
 
     Manual items aren't counted.
+
+## Phase 5
+
+55. **Revision compare assumes both revisions share a page frame,** which is normal for consultant re-issues. If a revision has shifted, the API takes an offset (`dx`, `dy` in points). Vector sheets are compared per colour, with a 1.5 pt tolerance and slivers under 3 pt ignored. Nearby changes within 30 pt are grouped into one region. Scanned sheets use an image difference: darker in the new revision means added, darker in the old means removed.
+
+56. **A measured run is "affected" by a revision** when at least 20% of its length lies on removed line work.
+
+57. **Carry-forward never copies the scale.** The new revision must be calibrated and verified first (non-negotiable 3). Runs are re-measured at the new scale. Everything arrives as suggested, with `source = "carried"`, so it stays out of totals until reviewed. Items already on the new sheet are skipped.
+
+58. **The marked-up PDF overlays the original page,** so it stays vector and prints crisply. Suggested items are included and drawn dashed or hollow unless `include_suggested=false`. Legend totals count confirmed items only.
+
+59. **Microsoft 365 sign-on** uses the authorisation code flow with PKCE, a nonce and a signed state cookie (10 minutes, HttpOnly). The ID token's signature is checked against Microsoft's published keys, along with its audience, issuer, expiry and nonce. The app token is handed back in the URL fragment, so it isn't sent to the server or written to logs. Unknown users are refused unless `SSO_AUTO_CREATE` is set, and roles are always managed by an admin in the app.

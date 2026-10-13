@@ -24,6 +24,13 @@ export default function App() {
   const reloadSettings = async () => setSettings(await api.get<Settings>("/api/settings"));
 
   useEffect(() => {
+    // Back from Microsoft sign-on: the token (or an error) arrives in the URL fragment.
+    const hash = new URLSearchParams(window.location.hash.slice(1));
+    if (hash.get("token")) setToken(hash.get("token"));
+    if (hash.has("token") || hash.has("sso_error")) {
+      if (hash.get("sso_error")) sessionStorageSafe("sso_error", hash.get("sso_error")!);
+      window.history.replaceState(null, "", window.location.pathname);
+    }
     if (!getToken()) { setChecked(true); return; }
     api.get<User>("/api/auth/me")
       .then(async (u) => { setUser(u); await reloadSettings(); })
@@ -71,4 +78,8 @@ export default function App() {
       </div>
     </AppCtx.Provider>
   );
+}
+
+function sessionStorageSafe(key: string, value: string) {
+  try { sessionStorage.setItem(key, value); } catch { /* storage unavailable */ }
 }

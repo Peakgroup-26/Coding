@@ -8,6 +8,7 @@ import type { CountItem, Flag, Job, Level, Pt, Run, Service, Sheet, Totals, View
 import { SnapIndex, dist, fmtM, ortho, polyLength } from "../util";
 import { TotalsTables } from "./Job";
 import { AiAssist } from "./AiAssist";
+import { DiffOverlay, ShortcutsHelp, type Diff } from "./RevisionCompare";
 
 type Tool = "pan" | "calibrate" | "verify" | "trace" | "riser" | "count" | "viewport";
 type ScaleTarget = { kind: "sheet" } | { kind: "viewport"; id: number };
@@ -23,6 +24,13 @@ export default function SheetViewer() {
   const [job, setJob] = useState<Job | null>(null);
   const [pin, setPin] = useState<Pt | null>(null); // a location linked to from a flag
   const [highlight, setHighlight] = useState<[number, number, number, number] | null>(null); // a line style's extent
+  const [revisions, setRevisions] = useState<{ id: number; revision: string; is_current: boolean; runs: number; counts: number }[]>([]);
+  const [diff, setDiff] = useState<Diff | null>(null);
+  const [compareMsg, setCompareMsg] = useState("");
+  const [showHelp, setShowHelp] = useState(false);
+  useEffect(() => {
+    api.get<typeof revisions>(`/api/sheets/${sheetId}/revisions`).then(setRevisions).catch(() => setRevisions([]));
+  }, [sheetId]);
   const { settings } = useApp();
   const services = settings.services.filter((s) => s.active);
   const serviceById = useMemo(() => new Map(settings.services.map((s) => [s.id, s])), [settings.services]);
@@ -289,6 +297,7 @@ export default function SheetViewer() {
       if (e.key === "Enter" && tool === "trace") { finishTrace(draft); return; }
       if (e.key === "Backspace" && draft.length) { setDraft((d) => d.slice(0, -1)); e.preventDefault(); return; }
       if (e.key === "Delete" && selected) { deleteSelected(); return; }
+      if (e.key === "?") { setShowHelp((v) => !v); return; }
       if (e.key === "f") { fit(); return; }
       if (e.key === "s") { setSnapOn((v) => !v); return; }
       if (e.key === "[" || e.key === "]") {
@@ -327,6 +336,22 @@ export default function SheetViewer() {
     setView({ scale, x: size.w / 2 - p[0] * scale, y: size.h / 2 - p[1] * scale });
   };
 
+  const currentIdx = revisions.findIndex((r) => r.id === Number(sheetId));
+  const previousRev = currentIdx > 0 ? revisions[currentIdx - 1] : undefined;
+  const toggleCompare = async () => {
+    if (diff) { setDiff(null); return; }
+    setCompareMsg("");
+    try { setDiff(await api.get<Diff>(`/api/sheets/${sheetId}/compare`)); } catch (e) { err(e); }
+  };
+  const carryForward = async () => {
+    try {
+      const r = await api.post<{ runs: number; counts: number; skipped: number; on_changed_line_work: number }>(`/api/sheets/${sheetId}/carry-forward`, {});
+      setCompareMsg(`${r.runs} run(s) and ${r.counts} count(s) carried forward as suggestions` +
+        (r.on_changed_line_work ? `; ${r.on_changed_line_work} on changed line work` : "") + (r.skipped ? `; ${r.skipped} already here` : "") + ".");
+      await refresh();
+    } catch (e) { err(e); }
+  };
+
   if (!sheet) return <main className="page">{error && <p className="error">{error}</p>}</main>;
 
   const sw = 1.5 / view.scale; // constant on-screen stroke width
@@ -344,6 +369,7 @@ export default function SheetViewer() {
 
   return (
     <div className="viewer">
+      {showHelp && <ShortcutsHelp onClose={() => setShowHelp(false)} />}
       <div className="toolbar">
         <Link to={`/jobs/${sheet.job_id}`}>← Register</Link>
         <b>{sheet.sheet_no || `Page ${sheet.page_no}`}</b> <span className="muted">Rev {sheet.revision || "–"} · {sheet.title}</span>
@@ -358,6 +384,12 @@ export default function SheetViewer() {
         ))}
         <label className="inline"><input type="checkbox" checked={snapOn} onChange={(e) => setSnapOn(e.target.checked)} /> Snap (S)</label>
         <button onClick={fit}>Fit (F)</button>
+        {revisions.length > 1 && sheet.is_current && (
+          <button className={diff ? "active" : ""} onClick={toggleCompare}>
+            {diff ? "Hide changes" : `Compare with Rev ${previousRev?.revision || "–"}`}
+          </button>
+        )}
+        <button title="Keyboard shortcuts" onClick={() => setShowHelp(true)}>?</button>
       </div>
 
       {!sheetVerified && (
@@ -439,6 +471,7 @@ export default function SheetViewer() {
                     x={-2.5 / view.scale} y={-6.5 / view.scale} />
                 </Group>
               ))}
+              {diff && <DiffOverlay diff={diff} scale={view.scale} />}
               {highlight && <Rect x={highlight[0] - 4} y={highlight[1] - 4} width={highlight[2] - highlight[0] + 8} height={highlight[3] - highlight[1] + 8}
                 fill="rgba(47,111,214,0.12)" stroke="#2f6fd6" strokeWidth={2 / view.scale} listening={false} />}
               {pin && <Circle x={pin[0]} y={pin[1]} radius={18 / view.scale} stroke="#2f6fd6" strokeWidth={3 / view.scale} dash={[5 / view.scale, 4 / view.scale]} listening={false} />}
@@ -569,6 +602,37 @@ export default function SheetViewer() {
               {runs.length + counts.length === 0 && <li className="muted">Nothing measured yet.</li>}
             </ul>
           </section>
+
+          {diff && (
+            <section>
+              <h3>Changes since Rev {diff.old_revision || "–"}</h3>
+              <div className="compare-legend">
+                <span className="add">━ added {Math.round(diff.added_length_pt * (sheet.calibrated_scale ?? 0) * 10) / 10 || ""}{sheet.calibrated_scale ? " m" : ""}</span>
+                <span className="rem">┅ removed {Math.round(diff.removed_length_pt * (sheet.calibrated_scale ?? 0) * 10) / 10 || ""}{sheet.calibrated_scale ? " m" : ""}</span>
+                <span className="muted">({diff.method === "vector" ? "line work" : "image"} compare)</span>
+              </div>
+              {diff.affected_runs.length > 0 && (
+                <p className="warn small">{diff.affected_runs.length} run(s) and {diff.affected_counts.length} count(s) measured on Rev {diff.old_revision} sit on line work that changed.</p>
+              )}
+              {diff.unmeasured_new_work && <p className="warn small">New line work on this revision isn't measured yet.</p>}
+              <ul className="items">
+                {diff.regions.map((r, i) => (
+                  <li key={i} onClick={() => focusOn([(r[0] + r[2]) / 2, (r[1] + r[3]) / 2])}>Change {i + 1}<span className="spacer" /><span className="muted small">show</span></li>
+                ))}
+                {diff.regions.length === 0 && <li className="muted">No changes found.</li>}
+              </ul>
+              {previousRev && previousRev.runs + previousRev.counts > 0 && (
+                <>
+                  <button className="primary" disabled={!sheet.scale_verified} onClick={carryForward}>
+                    Carry {previousRev.runs} run(s) and {previousRev.counts} count(s) forward
+                  </button>
+                  {!sheet.scale_verified && <span className="warn small"> Verify this revision's scale first.</span>}
+                  <p className="muted small">They arrive as suggestions to check; ones on changed line work are noted.</p>
+                </>
+              )}
+              {compareMsg && <p className="ok small">{compareMsg}</p>}
+            </section>
+          )}
 
           <AiAssist sheet={sheet} runs={runs} counts={counts} selectedCount={selCount} onChanged={refresh}
             onHighlight={setHighlight} onError={err} />
