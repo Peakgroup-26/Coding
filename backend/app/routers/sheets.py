@@ -13,7 +13,7 @@ from ..scale import (PAPER_SIZES_MM, ScaleError, calibrate_two_point, parse_stat
                      ratio_from_m_per_pt, stated_m_per_pt, verify)
 from ..schemas import CalibrateIn, SheetOut, SheetPatch, VerifyIn, ViewportIn, ViewportOut
 from ..titleblock import title_key
-from . import get_or_404
+from . import ensure_open, get_or_404
 
 router = APIRouter(prefix="/api", tags=["sheets"])
 
@@ -34,6 +34,7 @@ def get_sheet(sheet_id: int, db: Session = Depends(get_db), _: User = Depends(cu
 @router.patch("/sheets/{sheet_id}", response_model=SheetOut)
 def update_sheet(sheet_id: int, body: SheetPatch, db: Session = Depends(get_db), user: User = Depends(current_user)):
     sheet = get_or_404(db, Sheet, sheet_id)
+    ensure_open(db, sheet.job_id)
     before = snapshot(sheet)
     data = body.model_dump(exclude_unset=True)
     for k, v in data.items():
@@ -142,6 +143,7 @@ def _has_measurements(db: Session, sheet_id: int, viewport_id: int | None = None
 @router.post("/sheets/{sheet_id}/calibrate", response_model=SheetOut)
 def calibrate_sheet(sheet_id: int, body: CalibrateIn, db: Session = Depends(get_db), user: User = Depends(current_user)):
     sheet = get_or_404(db, Sheet, sheet_id)
+    ensure_open(db, sheet.job_id)
     if _has_measurements(db, sheet.id):
         raise HTTPException(409, "This sheet already has runs measured at the current scale. Delete them before recalibrating.")
     before = snapshot(sheet)
@@ -154,6 +156,7 @@ def calibrate_sheet(sheet_id: int, body: CalibrateIn, db: Session = Depends(get_
 @router.post("/sheets/{sheet_id}/verify", response_model=SheetOut)
 def verify_sheet(sheet_id: int, body: VerifyIn, db: Session = Depends(get_db), user: User = Depends(current_user)):
     sheet = get_or_404(db, Sheet, sheet_id)
+    ensure_open(db, sheet.job_id)
     before = snapshot(sheet)
     _verify(sheet, body)
     record(db, user.id, "sheet", sheet.id, "verify", before, snapshot(sheet))
@@ -165,6 +168,7 @@ def verify_sheet(sheet_id: int, body: VerifyIn, db: Session = Depends(get_db), u
 @router.post("/sheets/{sheet_id}/viewports", response_model=ViewportOut)
 def create_viewport(sheet_id: int, body: ViewportIn, db: Session = Depends(get_db), user: User = Depends(current_user)):
     sheet = get_or_404(db, Sheet, sheet_id)
+    ensure_open(db, sheet.job_id)
     x0, y0, x1, y1 = body.bbox
     if abs(x1 - x0) < 10 or abs(y1 - y0) < 10:
         raise HTTPException(422, "Viewport is too small")
@@ -179,6 +183,7 @@ def create_viewport(sheet_id: int, body: ViewportIn, db: Session = Depends(get_d
 @router.post("/viewports/{vp_id}/calibrate", response_model=ViewportOut)
 def calibrate_viewport(vp_id: int, body: CalibrateIn, db: Session = Depends(get_db), user: User = Depends(current_user)):
     vp = get_or_404(db, Viewport, vp_id)
+    ensure_open(db, vp.sheet.job_id)
     if _has_measurements(db, vp.sheet_id, vp.id):
         raise HTTPException(409, "This viewport already has runs measured at the current scale. Delete them before recalibrating.")
     before = snapshot(vp)
@@ -191,6 +196,7 @@ def calibrate_viewport(vp_id: int, body: CalibrateIn, db: Session = Depends(get_
 @router.post("/viewports/{vp_id}/verify", response_model=ViewportOut)
 def verify_viewport(vp_id: int, body: VerifyIn, db: Session = Depends(get_db), user: User = Depends(current_user)):
     vp = get_or_404(db, Viewport, vp_id)
+    ensure_open(db, vp.sheet.job_id)
     before = snapshot(vp)
     _verify(vp, body)
     record(db, user.id, "viewport", vp.id, "verify", before, snapshot(vp))
@@ -201,6 +207,7 @@ def verify_viewport(vp_id: int, body: VerifyIn, db: Session = Depends(get_db), u
 @router.delete("/viewports/{vp_id}", status_code=204)
 def delete_viewport(vp_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
     vp = get_or_404(db, Viewport, vp_id)
+    ensure_open(db, vp.sheet.job_id)
     if _has_measurements(db, vp.sheet_id, vp.id):
         raise HTTPException(409, "Delete the runs measured in this viewport first")
     record(db, user.id, "viewport", vp.id, "delete", before=snapshot(vp))

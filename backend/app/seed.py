@@ -1,7 +1,7 @@
 """Default seed data from the brief. Admins can rename, add or retire any of it.
 
-Waste percentages start at 0%: the brief says these are Peak's numbers to supply, so the
-system doesn't invent them.
+Waste percentages start at 0%, and no fitting rules or benchmarks are seeded: the brief says
+these are Peak's numbers to supply, so the system doesn't invent them.
 """
 import logging
 
@@ -17,45 +17,46 @@ log = logging.getLogger(__name__)
 STAGES = ["Site / civil", "Under slab", "Drains", "Rough-in", "Downpipes / roof", "Fit-off", "Final"]
 
 # code, name, colour, default stage
+# code, name, colour, default stage, kind (drainage | stormwater | water | fire | gas | other)
 SERVICES = [
-    ("CW", "Cold water", "#0070C0", "Rough-in"),
-    ("HW", "Hot water (incl. warm/tempered)", "#E02020", "Rough-in"),
-    ("HWS", "Hot water supply / plant", "#FF8C00", "Fit-off"),
-    ("SW", "Site / external water", "#00A0E0", "Site / civil"),
-    ("SAN", "Sanitary drainage", "#8B4513", "Under slab"),
-    ("TW", "Trade waste", "#808000", "Drains"),
-    ("FIRE", "Fire services", "#C00060", "Rough-in"),
-    ("RW", "Roof water", "#009090", "Downpipes / roof"),
-    ("STW", "Stormwater (building)", "#00A050", "Drains"),
-    ("CSTW", "Civil stormwater", "#006030", "Site / civil"),
-    ("PUMP", "Pumps and pump supply", "#7030A0", "Fit-off"),
-    ("PC", "PC item supply", "#606060", "Fit-off"),
-    ("GAS", "Gas (optional)", "#E0C000", "Rough-in"),
+    ("CW", "Cold water", "#0070C0", "Rough-in", "water"),
+    ("HW", "Hot water (incl. warm/tempered)", "#E02020", "Rough-in", "water"),
+    ("HWS", "Hot water supply / plant", "#FF8C00", "Fit-off", "water"),
+    ("SW", "Site / external water", "#00A0E0", "Site / civil", "water"),
+    ("SAN", "Sanitary drainage", "#8B4513", "Under slab", "drainage"),
+    ("TW", "Trade waste", "#808000", "Drains", "drainage"),
+    ("FIRE", "Fire services", "#C00060", "Rough-in", "fire"),
+    ("RW", "Roof water", "#009090", "Downpipes / roof", "stormwater"),
+    ("STW", "Stormwater (building)", "#00A050", "Drains", "stormwater"),
+    ("CSTW", "Civil stormwater", "#006030", "Site / civil", "stormwater"),
+    ("PUMP", "Pumps and pump supply", "#7030A0", "Fit-off", "other"),
+    ("PC", "PC item supply", "#606060", "Fit-off", "other"),
+    ("GAS", "Gas (optional)", "#E0C000", "Rough-in", "gas"),
 ]
 
 MATERIALS = ["PVC DWV", "PVC SWV", "PVC pressure", "Copper", "PEX", "HDPE", "Ductile iron", "Stainless steel", "Galvanised steel", "Polypropylene"]
 
-# name, default service code, is_fixture
+# name, default service code, is_fixture, needs drainage, needs water
 COUNT_TYPES = [
-    ("WC", "SAN", True),
-    ("Basin", "SAN", True),
-    ("Sink", "SAN", True),
-    ("Shower", "SAN", True),
-    ("Urinal", "SAN", True),
-    ("Cleaner's sink", "SAN", True),
-    ("Dishwasher", "SAN", True),
-    ("Floor waste", "SAN", False),
-    ("IO (inspection opening)", "SAN", False),
-    ("Pit", "STW", False),
-    ("Valve", "CW", False),
-    ("Hydrant", "FIRE", False),
-    ("Hose reel", "FIRE", False),
-    ("Tundish", "HWS", False),
-    ("TMV", "HW", False),
-    ("Backflow device", "CW", False),
-    ("Meter", "SW", False),
-    ("HWS unit", "HWS", False),
-    ("Hose tap", "CW", True),
+    ("WC", "SAN", True, True, True),
+    ("Basin", "SAN", True, True, True),
+    ("Sink", "SAN", True, True, True),
+    ("Shower", "SAN", True, True, True),
+    ("Urinal", "SAN", True, True, True),
+    ("Cleaner's sink", "SAN", True, True, True),
+    ("Dishwasher", "SAN", True, True, True),
+    ("Floor waste", "SAN", False, True, False),
+    ("IO (inspection opening)", "SAN", False, False, False),
+    ("Pit", "STW", False, False, False),
+    ("Valve", "CW", False, False, False),
+    ("Hydrant", "FIRE", False, False, False),
+    ("Hose reel", "FIRE", False, False, False),
+    ("Tundish", "HWS", False, False, False),
+    ("TMV", "HW", False, False, False),
+    ("Backflow device", "CW", False, False, False),
+    ("Meter", "SW", False, False, False),
+    ("HWS unit", "HWS", False, False, True),
+    ("Hose tap", "CW", True, False, True),
 ]
 
 
@@ -67,8 +68,8 @@ def seed(db: Session) -> None:
     stages = {s.name: s.id for s in db.scalars(select(Stage))}
 
     if not db.scalar(select(Service.id).limit(1)):
-        for i, (code, name, colour, stage) in enumerate(SERVICES):
-            db.add(Service(code=code, name=name, colour=colour, default_stage_id=stages.get(stage), order=i))
+        for i, (code, name, colour, stage, kind) in enumerate(SERVICES):
+            db.add(Service(code=code, name=name, colour=colour, kind=kind, default_stage_id=stages.get(stage), order=i))
         db.flush()
     services = {s.code: s.id for s in db.scalars(select(Service))}
 
@@ -77,9 +78,10 @@ def seed(db: Session) -> None:
             db.add(Material(name=name, waste_pct=0.0))
 
     if not db.scalar(select(CountType.id).limit(1)):
-        for name, svc, fixture in COUNT_TYPES:
+        for name, svc, fixture, drain, water in COUNT_TYPES:
             # Fixtures go in at fit-off; other items take their service's default stage.
             db.add(CountType(name=name, default_service_id=services.get(svc), is_fixture=fixture,
+                             needs_drainage=drain, needs_water=water,
                              default_stage_id=stages.get("Fit-off") if fixture else None))
 
     if not db.scalar(select(User.id).limit(1)):

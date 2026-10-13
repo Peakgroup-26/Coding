@@ -39,6 +39,8 @@ class Service(Base):
     code: Mapped[str] = mapped_column(String(20), unique=True)
     name: Mapped[str] = mapped_column(String(100))
     colour: Mapped[str] = mapped_column(String(9), default="#0070C0")
+    # What the service is, for check-measure: drainage | stormwater | water | fire | gas | other
+    kind: Mapped[str] = mapped_column(String(20), default="other")
     default_stage_id: Mapped[int | None] = mapped_column(ForeignKey("stages.id"), nullable=True)
     order: Mapped[int] = mapped_column(Integer, default=0)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -61,6 +63,9 @@ class CountType(Base):
     default_service_id: Mapped[int | None] = mapped_column(ForeignKey("services.id"), nullable=True)
     default_stage_id: Mapped[int | None] = mapped_column(ForeignKey("stages.id"), nullable=True)
     is_fixture: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Check-measure flags a fixture that has no drainage / water run connected when these are set.
+    needs_drainage: Mapped[bool] = mapped_column(Boolean, default=False)
+    needs_water: Mapped[bool] = mapped_column(Boolean, default=False)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
 
 
@@ -75,6 +80,9 @@ class Job(Base):
     due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     status: Mapped[str] = mapped_column(String(30), default="draft")
     price_book_version_id: Mapped[int | None] = mapped_column(Integer, nullable=True)  # Phase 3
+    signed_off_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    signed_off_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    checks_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     files: Mapped[list["DrawingFile"]] = relationship(back_populates="job", cascade="all, delete-orphan")
@@ -237,7 +245,95 @@ class AuditLog(Base):
     user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     entity: Mapped[str] = mapped_column(String(50))
     entity_id: Mapped[int] = mapped_column(Integer)
-    action: Mapped[str] = mapped_column(String(20))  # create | update | delete
+    job_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    action: Mapped[str] = mapped_column(String(20))  # create | update | delete | calibrate | finalise ...
     before: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     after: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class CatalogueItem(Base):
+    """Materials catalogue. Filled from Peak's price list in Phase 3; rules can point at it now."""
+    __tablename__ = "catalogue_items"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    code: Mapped[str] = mapped_column(String(100), unique=True)
+    description: Mapped[str] = mapped_column(String(500))
+    uom: Mapped[str] = mapped_column(String(20), default="ea")
+    cost: Mapped[float | None] = mapped_column(Float, nullable=True)
+    supplier: Mapped[str] = mapped_column(String(200), default="")
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class Rule(Base):
+    """A fitting or sundry allowance rule. Peak's own values; the system ships none.
+
+    trigger_type: per_fixture | per_metre | per_bend | per_branch | per_io | per_job
+    condition: JSON filters and trigger settings, e.g.
+        {"service_codes": ["SAN"], "materials": ["PVC DWV"], "dn_min": 80, "dn_max": 150,
+         "item_types": ["WC"], "angle_min": 67.5, "angle_max": 95,
+         "io_at_ends": true, "io_at_bends": false, "io_interval_m": 30}
+    formula: quantity expression; see expr.py for the variables each trigger provides.
+    """
+    __tablename__ = "rules"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(200))
+    trigger_type: Mapped[str] = mapped_column(String(20))
+    condition: Mapped[dict] = mapped_column(JSON, default=dict)
+    formula: Mapped[str] = mapped_column(String(500), default="n")
+    output_item_id: Mapped[int | None] = mapped_column(ForeignKey("catalogue_items.id"), nullable=True)
+    output_description: Mapped[str] = mapped_column(String(300), default="")  # template, e.g. "{material} DN{dn} 88° bend"
+    uom: Mapped[str] = mapped_column(String(20), default="ea")
+    stage_id: Mapped[int | None] = mapped_column(ForeignKey("stages.id"), nullable=True)  # null = source's stage
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+
+
+class GeneratedItem(Base):
+    """A fitting or sundry line, generated from a rule (or added by hand when rule_id is null)."""
+    __tablename__ = "generated_items"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id", ondelete="CASCADE"), index=True)
+    rule_id: Mapped[int | None] = mapped_column(ForeignKey("rules.id", ondelete="SET NULL"), nullable=True)
+    rule_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    source_ref: Mapped[str] = mapped_column(String(50), default="")  # run:12 | count:5 | job | manual
+    source_qty: Mapped[float | None] = mapped_column(Float, nullable=True)  # the n or m the formula used
+    item_id: Mapped[int | None] = mapped_column(ForeignKey("catalogue_items.id"), nullable=True)
+    description: Mapped[str] = mapped_column(String(300))
+    uom: Mapped[str] = mapped_column(String(20), default="ea")
+    service_id: Mapped[int | None] = mapped_column(ForeignKey("services.id"), nullable=True)
+    dn: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    material: Mapped[str] = mapped_column(String(100), default="")
+    qty: Mapped[float] = mapped_column(Float, default=0.0)
+    stage_id: Mapped[int | None] = mapped_column(ForeignKey("stages.id"), nullable=True)
+    overridden_qty: Mapped[float | None] = mapped_column(Float, nullable=True)
+    stage_overridden: Mapped[bool] = mapped_column(Boolean, default=False)
+    note: Mapped[str] = mapped_column(Text, default="")
+
+
+class Benchmark(Base):
+    """Ratio check for check-measure, e.g. drainage metres per fixture must be between min and max."""
+    __tablename__ = "benchmarks"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(200))
+    service_codes: Mapped[list] = mapped_column(JSON, default=list)  # metres of these services...
+    per: Mapped[str] = mapped_column(String(20), default="fixture")  # ...per fixture
+    min_value: Mapped[float | None] = mapped_column(Float, nullable=True)
+    max_value: Mapped[float | None] = mapped_column(Float, nullable=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class Flag(Base):
+    __tablename__ = "flags"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id", ondelete="CASCADE"), index=True)
+    check_type: Mapped[str] = mapped_column(String(50))
+    severity: Mapped[str] = mapped_column(String(10), default="warning")  # error | warning
+    ref: Mapped[str] = mapped_column(String(100), default="")  # e.g. run:12:end, count:5, sheet:3
+    sheet_id: Mapped[int | None] = mapped_column(ForeignKey("sheets.id", ondelete="CASCADE"), nullable=True)
+    x: Mapped[float | None] = mapped_column(Float, nullable=True)
+    y: Mapped[float | None] = mapped_column(Float, nullable=True)
+    message: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(20), default="open")  # open | resolved | accepted
+    resolved_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    note: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

@@ -2,14 +2,15 @@ export type Pt = [number, number];
 
 export interface User { id: number; email: string; name: string; role: "estimator" | "reviewer" | "admin"; active: boolean }
 export interface Stage { id: number; name: string; order: number; active: boolean }
-export interface Service { id: number; code: string; name: string; colour: string; default_stage_id: number | null; order: number; active: boolean }
+export interface Service { id: number; code: string; name: string; colour: string; kind: string; default_stage_id: number | null; order: number; active: boolean }
 export interface Material { id: number; name: string; waste_pct: number; active: boolean }
-export interface CountType { id: number; name: string; default_service_id: number | null; default_stage_id: number | null; is_fixture: boolean; active: boolean }
+export interface CountType { id: number; name: string; default_service_id: number | null; default_stage_id: number | null; is_fixture: boolean; needs_drainage: boolean; needs_water: boolean; active: boolean }
 export interface Settings { stages: Stage[]; services: Service[]; materials: Material[]; count_types: CountType[] }
 
 export interface Job {
   id: number; name: string; client: string; builder: string; address: string;
   quote_no: string; due_date: string | null; status: string;
+  signed_off_by: number | null; signed_off_at: string | null; checks_run_at: string | null;
 }
 
 export interface Level { id: number; job_id: number; name: string; rl: number; floor_to_floor_m: number }
@@ -64,4 +65,48 @@ export interface Totals {
   counts: { service_code: string; item_type: string; stage: string; qty: number }[];
   grand_total_m: number;
   excluded: { suggested_runs: number; suggested_counts: number; superseded_runs: number };
+}
+
+export type Trigger = "per_fixture" | "per_metre" | "per_bend" | "per_branch" | "per_io" | "per_job";
+
+export interface RuleCondition {
+  service_codes?: string[]; materials?: string[]; dn_min?: number | null; dn_max?: number | null;
+  item_types?: string[]; angle_min?: number | null; angle_max?: number | null;
+  io_at_ends?: boolean; io_at_bends?: boolean; io_interval_m?: number | null;
+}
+
+export interface Rule {
+  id: number; name: string; trigger_type: Trigger; condition: RuleCondition; formula: string;
+  output_item_id: number | null; output_description: string; uom: string; stage_id: number | null;
+  active: boolean; version: number;
+}
+
+export interface GeneratedItem {
+  id: number; job_id: number; rule_id: number | null; rule_version: number | null; source_ref: string;
+  source_qty: number | null; item_id: number | null; description: string; uom: string;
+  service_id: number | null; dn: number | null; material: string; qty: number; stage_id: number | null;
+  overridden_qty: number | null; stage_overridden: boolean; note: string;
+}
+
+export interface Flag {
+  id: number; job_id: number; check_type: string; severity: "error" | "warning"; ref: string;
+  sheet_id: number | null; x: number | null; y: number | null; message: string;
+  status: "open" | "resolved" | "accepted"; resolved_by: number | null; note: string;
+}
+
+export interface Benchmark {
+  id: number; name: string; service_codes: string[]; per: string;
+  min_value: number | null; max_value: number | null; active: boolean;
+}
+
+export interface AuditEntry {
+  id: number; user_id: number | null; entity: string; entity_id: number; action: string;
+  before: Record<string, unknown> | null; after: Record<string, unknown> | null; at: string;
+}
+
+export interface StageMatrix {
+  services: string[];
+  rows: { stage: string; cells: Record<string, number>; total_m: number }[];
+  service_totals: Record<string, number>;
+  grand_total_m: number;
 }

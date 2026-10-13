@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -52,6 +52,7 @@ class ServiceIn(BaseModel):
     code: str
     name: str
     colour: str = "#0070C0"
+    kind: str = "other"
     default_stage_id: int | None = None
     order: int = 0
     active: bool = True
@@ -76,6 +77,8 @@ class CountTypeIn(BaseModel):
     default_service_id: int | None = None
     default_stage_id: int | None = None
     is_fixture: bool = False
+    needs_drainage: bool = False
+    needs_water: bool = False
     active: bool = True
 
 
@@ -106,6 +109,9 @@ class JobPatch(BaseModel):
 
 class JobOut(ORM, JobIn):
     id: int
+    signed_off_by: int | None = None
+    signed_off_at: datetime | None = None
+    checks_run_at: datetime | None = None
 
 
 class FileOut(ORM):
@@ -304,3 +310,137 @@ class CountOut(ORM):
     location_tag: str
     status: str
     source: str
+
+
+# --- Phase 2: rules, generated items, check-measure ---
+class CatalogueItemIn(BaseModel):
+    code: str
+    description: str
+    uom: str = "ea"
+    cost: float | None = None
+    supplier: str = ""
+    active: bool = True
+
+
+class CatalogueItemOut(ORM, CatalogueItemIn):
+    id: int
+
+
+class RuleCondition(BaseModel):
+    service_codes: list[str] = []
+    materials: list[str] = []
+    dn_min: int | None = None
+    dn_max: int | None = None
+    item_types: list[str] = []
+    angle_min: float | None = None
+    angle_max: float | None = None
+    io_at_ends: bool = False
+    io_at_bends: bool = False
+    io_interval_m: float | None = Field(default=None, ge=0)
+
+
+class RuleIn(BaseModel):
+    name: str
+    trigger_type: str
+    condition: RuleCondition = RuleCondition()
+    formula: str = "n"
+    output_item_id: int | None = None
+    output_description: str = ""
+    uom: str = "ea"
+    stage_id: int | None = None
+    active: bool = True
+
+
+class RuleOut(ORM):
+    id: int
+    name: str
+    trigger_type: str
+    condition: dict
+    formula: str
+    output_item_id: int | None
+    output_description: str
+    uom: str
+    stage_id: int | None
+    active: bool
+    version: int
+
+
+class GeneratedItemOut(ORM):
+    id: int
+    job_id: int
+    rule_id: int | None
+    rule_version: int | None
+    source_ref: str
+    source_qty: float | None
+    item_id: int | None
+    description: str
+    uom: str
+    service_id: int | None
+    dn: int | None
+    material: str
+    qty: float
+    stage_id: int | None
+    overridden_qty: float | None
+    stage_overridden: bool
+    note: str
+
+
+class GeneratedItemPatch(BaseModel):
+    overridden_qty: float | None = Field(default=None, ge=0)
+    clear_override: bool = False
+    stage_id: int | None = None
+    note: str | None = None
+
+
+class ManualItemIn(BaseModel):
+    description: str
+    uom: str = "ea"
+    qty: float = Field(gt=0)
+    service_id: int | None = None
+    stage_id: int | None = None
+    note: str = ""
+
+
+class BenchmarkIn(BaseModel):
+    name: str
+    service_codes: list[str]
+    per: str = "fixture"
+    min_value: float | None = None
+    max_value: float | None = None
+    active: bool = True
+
+
+class BenchmarkOut(ORM, BenchmarkIn):
+    id: int
+
+
+class FlagOut(ORM):
+    id: int
+    job_id: int
+    check_type: str
+    severity: str
+    ref: str
+    sheet_id: int | None
+    x: float | None
+    y: float | None
+    message: str
+    status: str
+    resolved_by: int | None
+    note: str
+
+
+class FlagPatch(BaseModel):
+    status: str  # open | resolved | accepted
+    note: str = ""
+
+
+class AuditOut(ORM):
+    id: int
+    user_id: int | None
+    user_name: str = ""
+    entity: str
+    entity_id: int
+    action: str
+    before: dict | None
+    after: dict | None
+    at: datetime

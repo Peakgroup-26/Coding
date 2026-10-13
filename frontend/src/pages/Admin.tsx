@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import { useApp } from "../App";
-import type { User } from "../types";
+import type { Benchmark, User } from "../types";
+
+const SERVICE_KINDS = ["drainage", "stormwater", "water", "fire", "gas", "other"];
 
 /** Admin-maintained lists. Items are retired (unticked "active"), never deleted, so old jobs keep their references. */
 export default function Admin() {
@@ -25,13 +27,18 @@ export default function Admin() {
         <section className="card">
           <h2>Services</h2>
           <table>
-            <thead><tr><th>Code</th><th>Name</th><th>Colour</th><th>Default stage</th><th>Order</th><th>Active</th></tr></thead>
+            <thead><tr><th>Code</th><th>Name</th><th>Colour</th><th>Kind</th><th>Default stage</th><th>Order</th><th>Active</th></tr></thead>
             <tbody>
               {settings.services.map((s) => (
                 <tr key={s.id}>
                   <td><Cell v={s.code} onSave={(code) => save("services", s.id, { ...s, code })} /></td>
                   <td><Cell v={s.name} onSave={(name) => save("services", s.id, { ...s, name })} /></td>
                   <td><input type="color" value={s.colour} onChange={(e) => save("services", s.id, { ...s, colour: e.target.value })} /></td>
+                  <td>
+                    <select value={s.kind} onChange={(e) => save("services", s.id, { ...s, kind: e.target.value })}>
+                      {SERVICE_KINDS.map((k) => <option key={k}>{k}</option>)}
+                    </select>
+                  </td>
                   <td>
                     <select value={s.default_stage_id ?? ""} onChange={(e) => save("services", s.id, { ...s, default_stage_id: Number(e.target.value) || null })}>
                       <option value="">–</option>
@@ -85,7 +92,7 @@ export default function Admin() {
         <section className="card">
           <h2>Count items</h2>
           <table>
-            <thead><tr><th>Item</th><th>Default service</th><th>Default stage</th><th>Fixture</th><th>Active</th></tr></thead>
+            <thead><tr><th>Item</th><th>Default service</th><th>Default stage</th><th>Fixture</th><th>Needs drain</th><th>Needs water</th><th>Active</th></tr></thead>
             <tbody>
               {settings.count_types.map((c) => (
                 <tr key={c.id}>
@@ -103,6 +110,8 @@ export default function Admin() {
                     </select>
                   </td>
                   <td><input type="checkbox" checked={c.is_fixture} onChange={(e) => save("count-types", c.id, { ...c, is_fixture: e.target.checked })} /></td>
+                  <td><input type="checkbox" checked={c.needs_drainage} onChange={(e) => save("count-types", c.id, { ...c, needs_drainage: e.target.checked })} /></td>
+                  <td><input type="checkbox" checked={c.needs_water} onChange={(e) => save("count-types", c.id, { ...c, needs_water: e.target.checked })} /></td>
                   <td><input type="checkbox" checked={c.active} onChange={(e) => save("count-types", c.id, { ...c, active: e.target.checked })} /></td>
                 </tr>
               ))}
@@ -111,6 +120,7 @@ export default function Admin() {
           <AddRow fields={["Item"]} onAdd={([name]) => save("count-types", null, { name })} />
         </section>
 
+        <Benchmarks />
         <Users />
       </div>
     </main>
@@ -187,5 +197,55 @@ function AddRow({ fields, onAdd }: { fields: string[]; onAdd: (vals: string[]) =
       ))}
       <button disabled={vals.some((v) => !v)} onClick={() => { onAdd(vals); setVals(fields.map(() => "")); }}>Add</button>
     </div>
+  );
+}
+
+function Benchmarks() {
+  const { settings } = useApp();
+  const [items, setItems] = useState<Benchmark[]>([]);
+  const [form, setForm] = useState({ name: "", codes: "", min: "", max: "" });
+  const [error, setError] = useState("");
+  const load = () => api.get<Benchmark[]>("/api/benchmarks").then(setItems);
+  useEffect(() => { load(); }, []);
+  const num = (v: string) => (v.trim() === "" ? null : Number(v));
+  const save = async (b: Benchmark | null, body: object) => {
+    setError("");
+    try {
+      if (b) await api.put(`/api/benchmarks/${b.id}`, { ...b, ...body });
+      else await api.post("/api/benchmarks", body);
+      load();
+    } catch (e) { setError((e as Error).message); }
+  };
+  return (
+    <section className="card">
+      <h2>Check-measure benchmarks</h2>
+      <p className="muted small">Metres of the chosen services per fixture. Check-measure flags a job outside the band. Use Peak's figures from past jobs.</p>
+      <table>
+        <thead><tr><th>Name</th><th>Services</th><th>Min m/fixture</th><th>Max m/fixture</th><th>Active</th></tr></thead>
+        <tbody>
+          {items.map((b) => (
+            <tr key={b.id}>
+              <td><Cell v={b.name} onSave={(name) => save(b, { name })} /></td>
+              <td><Cell v={b.service_codes.join(", ")} onSave={(v) => save(b, { service_codes: v.split(",").map((x) => x.trim().toUpperCase()).filter(Boolean) })} /></td>
+              <td><Cell v={b.min_value === null ? "" : String(b.min_value)} onSave={(v) => save(b, { min_value: num(v) })} /></td>
+              <td><Cell v={b.max_value === null ? "" : String(b.max_value)} onSave={(v) => save(b, { max_value: num(v) })} /></td>
+              <td><input type="checkbox" checked={b.active} onChange={(e) => save(b, { active: e.target.checked })} /></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div className="row wrap">
+        <input placeholder="e.g. Drainage m per fixture" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+        <input placeholder={`Services, e.g. SAN, TW (${settings.services.length} available)`} value={form.codes} onChange={(e) => setForm({ ...form, codes: e.target.value })} />
+        <input className="tiny" placeholder="Min" value={form.min} onChange={(e) => setForm({ ...form, min: e.target.value })} />
+        <input className="tiny" placeholder="Max" value={form.max} onChange={(e) => setForm({ ...form, max: e.target.value })} />
+        <button disabled={!form.name || !form.codes} onClick={async () => {
+          await save(null, { name: form.name, service_codes: form.codes.split(",").map((x) => x.trim().toUpperCase()).filter(Boolean),
+            min_value: num(form.min), max_value: num(form.max) });
+          setForm({ name: "", codes: "", min: "", max: "" });
+        }}>Add</button>
+      </div>
+      {error && <p className="error">{error}</p>}
+    </section>
   );
 }

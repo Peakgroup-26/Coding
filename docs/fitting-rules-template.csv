@@ -1,0 +1,10 @@
+name,trigger_type,service_codes,materials,dn_min,dn_max,item_types,angle_min,angle_max,io_at_ends,io_at_bends,io_interval_m,formula,output_description,uom,stage,active
+EXAMPLE - WC on slab junction,per_fixture,SAN,,,,WC,,,,,,n,PVC DWV DN100 junction (WC),ea,Under slab,no
+EXAMPLE - WC pan connector,per_fixture,SAN,,,,WC,,,,,,n,Pan connector,ea,Fit-off,no
+EXAMPLE - DWV 88 bends,per_bend,SAN,PVC DWV,,,,67.5,95,,,,n,{material} DN{dn} 88° bend,ea,,no
+EXAMPLE - DWV 45 bends,per_bend,SAN,PVC DWV,,,,22.5,67.5,,,,n,{material} DN{dn} 45° bend,ea,,no
+EXAMPLE - DWV junctions,per_branch,SAN,PVC DWV,,,,,,,,,n,{material} DN{main_dn} x DN{branch_dn} junction,ea,,no
+EXAMPLE - DWV pipe joints,per_metre,SAN,PVC DWV,,,,,,,,,ceil(m / 6),{material} DN{dn} coupling,ea,,no
+EXAMPLE - Copper clips,per_metre,CW,Copper,15,25,,,,,,,ceil(m / 1.5),DN{dn} copper clip,ea,Rough-in,no
+EXAMPLE - Drain IOs,per_io,SAN,,,,,,,yes,,30,n,DN{dn} inspection opening,ea,,no
+EXAMPLE - Solvent cement,per_job,"SAN, STW",,,,,,,,,,ceil(m / 50),Solvent cement 500 mL,tin,Under slab,no

@@ -8,7 +8,7 @@ from openpyxl.utils import get_column_letter
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .models import CountItem, Job, Level, Run, Service, Sheet, Stage
+from .models import CountItem, Flag, GeneratedItem, Job, Level, Rule, Run, Service, Sheet, Stage
 from .takeoff import d2, job_totals, run_waste_m
 
 HEADER_FILL = PatternFill("solid", fgColor="1F3A5F")
@@ -76,6 +76,15 @@ def build_workbook(db: Session, job_id: int) -> bytes:
     _sheet(wb, "By stage", ["Stage", "Service", "Total (m)"],
            [[s["stage"], s["service_code"], s["total_m"]] for s in t["stages"]], {3})
 
+    # Stage-by-service matrix: rows reconcile to the service totals.
+    codes = [s["service_code"] for s in t["services"]]
+    cells: dict = {}
+    for s in t["stages"]:
+        cells.setdefault(s["stage"], {})[s["service_code"]] = s["total_m"]
+    matrix = [[stage] + [cells[stage].get(c) for c in codes] + [round(sum(cells[stage].values()), 2)] for stage in cells]
+    matrix.append(["Total"] + [s["total_m"] for s in t["services"]] + [t["grand_total_m"]])
+    _sheet(wb, "Stage x service", ["Stage"] + codes + ["Total (m)"], matrix, set(range(2, len(codes) + 3)))
+
     _sheet(wb, "Counts", ["Service", "Item", "Stage", "Qty"],
            [[c["service_code"], c["item_type"], c["stage"], c["qty"]] for c in t["counts"]])
 
@@ -105,6 +114,29 @@ def build_workbook(db: Session, job_id: int) -> bytes:
                            levels.get(c.level_id, ""), c.location_tag, stages.get(c.stage_id, ""), c.status])
     _sheet(wb, "Count detail", ["Count ID", "Sheet", "Service", "Item", "Level", "Location", "Stage", "Status"], count_rows)
 
+    from .rules import DISCLAIMER, effective_qty  # local import: rules imports takeoff
+
+    fittings = []
+    gen = list(db.scalars(select(GeneratedItem).where(GeneratedItem.job_id == job_id).order_by(GeneratedItem.id)))
+    rule_names = {r.id: r.name for r in db.scalars(select(Rule))}
+    for g in gen:
+        q = effective_qty(g)
+        fittings.append([stages.get(g.stage_id, "Unstaged"), services.get(g.service_id, ""), g.description, g.uom, q,
+                         g.qty if g.overridden_qty is not None else None,
+                         rule_names.get(g.rule_id, "Manual" if g.rule_id is None else "(deleted rule)"),
+                         _source_label(g.source_ref, sheets, db), g.note])
+    fittings.sort(key=lambda r: (r[0], r[1], r[2]))
+    ws_f = _sheet(wb, "Fittings and sundries", ["Stage", "Service", "Item", "Unit", "Qty", "Generated qty (if overridden)",
+                                                 "Rule", "Source", "Note"], fittings)
+    ws_f.append([])
+    ws_f.append([DISCLAIMER])
+
+    flag_rows = []
+    sheet_labels = {s.id: s.sheet_no or f"p{s.page_no}" for s in sheets.values()}
+    for f in db.scalars(select(Flag).where(Flag.job_id == job_id).order_by(Flag.severity, Flag.check_type, Flag.id)):
+        flag_rows.append([f.severity, f.check_type, sheet_labels.get(f.sheet_id, ""), f.message, f.status, f.note])
+    _sheet(wb, "Flags and notes", ["Severity", "Check", "Sheet", "Message", "Status", "Note"], flag_rows)
+
     reg = []
     for s in sorted(sheets.values(), key=lambda s: (s.sheet_no or "~", s.revision)):
         reg.append([s.sheet_no, s.title, s.revision, s.page_size, s.stated_scale,
@@ -116,3 +148,17 @@ def build_workbook(db: Session, job_id: int) -> bytes:
     buf = BytesIO()
     wb.save(buf)
     return buf.getvalue()
+
+
+def _source_label(ref: str, sheets: dict, db: Session) -> str:
+    """Readable source for a generated line, e.g. "Run #12 (H-101)"."""
+    kind, _, rest = (ref or "").partition(":")
+    if kind == "run" and rest.isdigit():
+        r = db.get(Run, int(rest))
+        sh = sheets.get(r.sheet_id) if r else None
+        return f"Run #{rest}" + (f" ({sh.sheet_no or f'p{sh.page_no}'})" if sh else "")
+    if kind == "count" and rest.isdigit():
+        c = db.get(CountItem, int(rest))
+        sh = sheets.get(c.sheet_id) if c else None
+        return f"{c.item_type if c else 'Count'} #{rest}" + (f" ({sh.sheet_no or f'p{sh.page_no}'})" if sh else "")
+    return {"job": "Whole job", "manual": "Added by hand"}.get(ref, ref)

@@ -2,7 +2,7 @@
 
 A web app for Peak Plumbing & Gas Services that turns commercial hydraulic drawings into measured, staged quantities, and later a priced estimate. It follows the build brief "Hydraulic Take-off & Estimating System — Build Brief for Codex".
 
-**Status: Phase 1 (core take-off) is built.** Phases 2–5 are still to come (see below).
+**Status: Phases 1 (core take-off) and 2 (rules, staging, check-measure) are built.** Phases 3–5 are still to come (see below).
 
 ## What Phase 1 does
 
@@ -38,6 +38,49 @@ A web app for Peak Plumbing & Gas Services that turns commercial hydraulic drawi
   The export and the screen use the same totals function, so they always match.
 - **Roles:** Estimator, Reviewer and Admin. The admin maintains services and colours, stages, materials and waste %, count items, and users.
 - **Audit log:** every create, update, calibration and verification is recorded with before and after values.
+
+## What Phase 2 adds
+
+- **Fittings and sundries rules engine.** Rules are Peak's own allowances, kept as data. **None ship with the system.** Each rule has:
+  - a trigger
+  - filters for service, material, DN range, fixture type and angle band
+  - a quantity formula
+  - an output item description, a unit and a stage
+
+  The six trigger types are:
+
+  | Trigger | Formula variables |
+  |---|---|
+  | Per fixture | `n` = 1 per fixture |
+  | Per metre of run | `m` = metres, `dn` |
+  | Per change of direction (angle band, from the traced vertices) | `n` = bends |
+  | Per branch connection (a run joining another part-way along) | `n` = branches |
+  | Per IO requirement (free ends, bends, every X m) | `n` = IO locations |
+  | Per job (sundries) | `m` = total metres, `fixtures` = fixture count |
+
+  Formulas are plain arithmetic, e.g. `ceil(m / 1.2)`, evaluated safely. Output descriptions can use `{dn}`, `{material}`, `{main_dn}` and similar fields.
+- **Rule editor** (Rules page) plus **CSV import and export**. `docs/fitting-rules-template.csv` has the columns and a few rows labelled *EXAMPLE*, which are imported as inactive. Fill it in with Peak's values and import it.
+- **Generated items** trace to their rule (and its version) and their source: a run, a fixture, or the whole job. Click through to the drawing. Quantities and stages can be overridden with a note, and overrides survive regeneration. Items can also be added by hand.
+- **Staging:**
+  - The rule's stage, or else the source's stage.
+  - Fixtures default to Fit-off.
+  - A stage × service matrix that reconciles to the service totals.
+- **Check-measure** flags problems and never fixes them. Each flag links to its spot on the drawing. It checks for:
+  - hydraulic sheets with nothing measured
+  - open run ends
+  - fixtures with no drainage or water run connected
+  - drainage size jumps, where a run flows into a smaller one
+  - sheets with the same stated scale but different calibrations
+  - benchmark ratios outside Peak's band
+  - duplicate or overlapping runs
+  - an independent second-pass total
+  - unconfirmed items
+  - fittings not yet generated
+- **Reviewer sign-off:** "Sign off as final" re-runs the checks and needs every flag resolved or accepted with a note. A final estimate is locked until a reviewer reopens it.
+- **Audit log** per job: who changed what, with before and after values, including deleted items.
+- The **Excel export** adds three tabs: *Stage x service*, *Fittings and sundries* (with the AS/NZS 3500 disclaimer) and *Flags and notes*.
+
+Drainage runs are traced **in the direction of flow**. The viewer shows flow arrows, and the run editor has a *Reverse direction* button. Size-jump checks rely on this.
 
 The Phase 1 acceptance criteria from the brief are automated tests in `backend/tests/test_phase1_acceptance.py`:
 
@@ -111,11 +154,16 @@ frontend/src/        React + TypeScript app (Konva canvas for the take-off overl
 DECISIONS.md         assumptions and choices made where the brief left room
 ```
 
+Phase 2's acceptance criteria are tested in `backend/tests/test_phase2_rules.py` and `test_phase2_checks.py`:
+
+- Every generated item traces to its rule and its source.
+- Every check-measure test triggers on a job seeded with faults.
+- Stage totals reconcile to service totals.
+
 ## Next phases (from the brief)
 
-2. Fittings and sundries rules engine and editor, check-measure flags, stage rules
 3. Pricing: prebuild and rate import, mapping, labour, margins, price-book versions, Simpro CSV
 4. AI assistance: sheet classification, legend reading, run and fixture suggestions
 5. Revision compare, marked-up PDF export, Microsoft 365 single sign-on
 
-Peak's inputs (the brief's "Inputs Peak must supply") are needed from Phase 2 onwards, especially the fitting and sundry rules, the Simpro prebuild export, the rates, and three completed jobs for the golden-job test.
+Peak's inputs (the brief's "Inputs Peak must supply") are needed now, especially the fitting and sundry rules, the Simpro prebuild export, the rates, and three completed jobs for the golden-job test.

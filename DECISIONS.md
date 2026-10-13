@@ -41,3 +41,39 @@ These are choices made where the brief left room, as it asks. Each one can be re
 18. **Local disk storage** sits behind `storage.py`. Swap in an S3-compatible bucket (AWS Sydney) for production by implementing the same functions.
 
 19. **Default service colours** follow common hydraulic drafting practice and are editable: cold water blue, hot water red, sanitary brown, stormwater green, fire magenta, gas yellow.
+
+## Phase 2
+
+20. **Rules write a description, not only a catalogue link.** The brief's Rule has an `output_item_id`, but Peak's catalogue and prebuilds don't arrive until Phase 3. So each rule also has an output description template (`{material} DN{dn} 88° bend`) and a unit. `output_item_id` is optional now. Phase 3 maps descriptions to catalogue items and prebuilds.
+
+21. **Formulas are evaluated by a small whitelist evaluator** (numbers, `n`, `m`, `dn`, `fixtures`, arithmetic, `ceil`, `floor`, `round`, `min`, `max`, `abs`). They are never run with `eval`.
+
+22. **One generated line per rule per source.** A source is a run, a counted item, or the job. Lines are only added up for display and export. This keeps each line traceable, as the brief requires.
+
+23. **Overrides survive regeneration** when the rule, source and description still match. If a line disappears because the run was deleted or the rule no longer matches, its override goes with it, and the generate result says how many were dropped. Rule-generated lines can't be deleted, only set to 0 with a note. Lines added by hand can be deleted.
+
+24. **Bends come from traced polyline vertices.** The deflection angle is the change of direction, so a square corner is 90°. Each rule matches an angle band, e.g. 67.5–95° for an "88° bend". Deflections under 5° are treated as drafting wobble.
+
+25. **A branch is a run end that meets another run of the same service part-way along it,** or at one of its interior vertices. End-to-end joins are not branches. Runs and risers only connect within the same service. Counted items connect to any service.
+
+26. **Connection tolerances are measured on the page,** not in metres, so they don't depend on scale. Run ends join within 6 pt (about 2 mm on paper). Fixtures join within 20 pt (about 7 mm), because symbols are bigger than the point clicked.
+
+27. **IO "at ends" means run ends that don't join another run of the same service:** heads of drains, and ends at fixtures or pits.
+
+28. **Drainage is traced in the direction of flow.** The size-jump check reads the run a run's end flows into as downstream. The viewer shows flow arrows on drainage and stormwater, and *Reverse direction* fixes runs traced the other way.
+
+29. **Service kind** (drainage, stormwater, water, fire, gas, other) and each count item's *needs drainage* / *needs water* settings drive the check-measure connection checks. Both are admin-editable.
+
+30. **Duplicate checks:**
+    - Same sheet, same service, with more than 80% overlap: flagged as an error.
+    - Different sheets, same service, DN, material and level, with lengths within 1%: flagged as a warning. It may be legitimate, so accepting it with a note is expected.
+
+31. **The second-pass check** re-derives every run from its stored geometry, scale and levels, independently of the stored figures, and compares that with the displayed total.
+
+32. **No benchmarks are seeded.** Peak sets them on the Admin page.
+
+33. **Sign-off needs the Reviewer or Admin role.** It re-runs the checks first. While a job is final, all its measurements, sheets, levels and items are read-only. The PATCH endpoint can't set the status to final directly.
+
+34. **Audit entries now store the job id,** so a job's log includes items that have since been deleted.
+
+35. **Schema:** Phase 2 adds tables and columns. The development database is created with `create_all`, which doesn't alter existing tables, so delete `backend/data/` after updating. Alembic migrations are needed before production. That's still a to-do.

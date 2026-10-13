@@ -7,6 +7,7 @@ import Jobs from "./pages/Jobs";
 import JobPage from "./pages/Job";
 import SheetViewer from "./pages/SheetViewer";
 import Admin from "./pages/Admin";
+import Rules from "./pages/Rules";
 
 interface Ctx { user: User; settings: Settings; reloadSettings: () => Promise<void> }
 const AppCtx = createContext<Ctx | null>(null);
@@ -46,6 +47,7 @@ export default function App() {
           <Link to="/" className="brand">Peak Take-off</Link>
           <nav>
             <Link to="/">Jobs</Link>
+            <Link to="/rules">Rules</Link>
             {user.role === "admin" && <Link to="/admin">Admin</Link>}
           </nav>
           <span className="spacer" />
@@ -56,6 +58,7 @@ export default function App() {
           <Route path="/" element={<Jobs />} />
           <Route path="/jobs/:jobId" element={<JobPage />} />
           <Route path="/sheets/:sheetId" element={<SheetViewer />} />
+          <Route path="/rules" element={<Rules />} />
           <Route path="/admin" element={user.role === "admin" ? <Admin /> : <Navigate to="/" />} />
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>
