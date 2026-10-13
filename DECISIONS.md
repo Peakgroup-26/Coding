@@ -145,3 +145,13 @@ These are choices made where the brief left room, as it asks. Each one can be re
 58. **The marked-up PDF overlays the original page,** so it stays vector and prints crisply. Suggested items are included and drawn dashed or hollow unless `include_suggested=false`. Legend totals count confirmed items only.
 
 59. **Microsoft 365 sign-on** uses the authorisation code flow with PKCE, a nonce and a signed state cookie (10 minutes, HttpOnly). The ID token's signature is checked against Microsoft's published keys, along with its audience, issuer, expiry and nonce. The app token is handed back in the URL fragment, so it isn't sent to the server or written to logs. Unknown users are refused unless `SSO_AUTO_CREATE` is set, and roles are always managed by an admin in the app.
+
+## Production readiness
+
+60. **Migrations run on startup** (`alembic upgrade head` inside the app's lifespan), so a deploy can't run against an out-of-date schema. That's why the container runs one process: run more containers rather than more workers per container. A database created before migrations existed is adopted (stamped) only when its schema already matches the models, so it never silently runs on a mismatched schema. `render_as_batch` keeps migrations working on SQLite as well as PostgreSQL.
+
+61. **S3 is the source of truth when on, and the local disk is a cache.** Every new file is uploaded as soon as it's complete, with server-side encryption (AES256). Reads fetch from the bucket when the cache doesn't have the file, so servers are disposable. Files are still only served through authenticated endpoints, never as bucket URLs. The default region is ap-southeast-2 (Sydney), for data residency.
+
+62. **CI** runs lint (pyflakes), then the backend tests on SQLite and on PostgreSQL 16, then the frontend typecheck and build.
+
+63. **The Docker image** builds the frontend in a Node stage and runs on `python:3.12-slim` as a non-root user. It has a health check and trusts proxy headers, so HTTPS termination in front gives correct redirect URLs for sign-on. The compose file is for a single server or a trial. A larger deployment would use managed PostgreSQL (e.g. RDS in Sydney) and S3.

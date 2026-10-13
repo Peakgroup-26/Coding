@@ -95,7 +95,8 @@ def process_file(db: Session, drawing: DrawingFile) -> list[Sheet]:
         zoom = min(config.RENDER_MAX_PX / max(width_pt, height_pt), 4.0)
         pix = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom), alpha=False)
         image_key = f"jobs/{job.id}/files/{drawing.id}/page-{i + 1}.png"
-        pix.save(str(storage.local_path(image_key)))
+        pix.save(str(storage.writable_path(image_key)))
+        storage.commit(image_key)
 
         text = page.get_text("text") or ""
         has_text = len(text.strip()) > 20

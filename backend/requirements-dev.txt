@@ -1,0 +1,4 @@
+# Tests and lint (CI installs these on top of requirements.txt)
+pytest>=8
+pyflakes>=3.2
+moto[s3]>=5.0

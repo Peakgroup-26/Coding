@@ -4,7 +4,8 @@ import tempfile
 
 _tmp = tempfile.mkdtemp(prefix="takeoff-test-")
 os.environ["TAKEOFF_DATA_DIR"] = _tmp
-os.environ["DATABASE_URL"] = f"sqlite:///{_tmp}/test.db"
+# TEST_DATABASE_URL runs the suite against another database, e.g. PostgreSQL in CI.
+os.environ["DATABASE_URL"] = os.environ.get("TEST_DATABASE_URL") or f"sqlite:///{_tmp}/test.db"
 os.environ["SECRET_KEY"] = "test-secret"
 os.environ["ADMIN_EMAIL"] = "admin@test.local"
 os.environ["ADMIN_PASSWORD"] = "admin-password"
@@ -12,6 +13,7 @@ os.environ["ADMIN_PASSWORD"] = "admin-password"
 import pymupdf as fitz  # noqa: E402
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
+from sqlalchemy import text  # noqa: E402
 
 from app.db import Base, engine  # noqa: E402
 from app.main import app  # noqa: E402
@@ -33,6 +35,8 @@ def client():
         yield c
     engine.dispose()
     Base.metadata.drop_all(engine)
+    with engine.begin() as conn:  # so the next run on a shared database migrates from scratch
+        conn.execute(text("DROP TABLE IF EXISTS alembic_version"))
     shutil.rmtree(_tmp, ignore_errors=True)
 
 
