@@ -2,7 +2,7 @@
 
 A web app for Peak Plumbing & Gas Services that turns commercial hydraulic drawings into measured, staged quantities, and later a priced estimate. It follows the build brief "Hydraulic Take-off & Estimating System — Build Brief for Codex".
 
-**Status: Phases 1 (core take-off) and 2 (rules, staging, check-measure) are built.** Phases 3–5 are still to come (see below).
+**Status: Phases 1 (core take-off), 2 (rules, staging, check-measure) and 3 (pricing) are built.** Phases 4–5 are still to come (see below).
 
 ## What Phase 1 does
 
@@ -154,15 +154,43 @@ frontend/src/        React + TypeScript app (Konva canvas for the take-off overl
 DECISIONS.md         assumptions and choices made where the brief left room
 ```
 
+## What Phase 3 adds
+
+- **Price books (versions):**
+  - Import Peak's price list, prebuilds and labour rates from CSV or Excel into a draft version.
+  - Columns are recognised from Simpro-style headings, and any column can be named explicitly.
+  - Prebuilds can be one row per component (the Simpro export layout) or have a components column. Prebuilds can contain other prebuilds.
+  - Set the default labour rate, then **lock** the version. Locked versions never change, and jobs keep the version they were priced on. For new prices, copy the version.
+  - `docs/sample-price-book/` has made-up *SAMPLE* files for trying it out.
+- **Mappings:**
+  - Each take-off item maps to a prebuild or catalogue code: a pipe by service, material and DN; a counted item by type; a fitting line by description.
+  - A rule's catalogue item is used automatically.
+  - Mappings use codes, so they carry across versions.
+  - Unmapped items are listed on the job's Pricing tab, each with a one-click map.
+- **Job pricing:**
+  - Material is the sum of component costs. Labour is prebuild hours × the charge-out rate.
+  - Margin works as markup on cost or margin on sell. Set it per job, with per-service and per-stage overrides.
+  - PC items, provisional sums (with or without margin) and exclusions.
+  - GST is shown separately. Totals are given by stage and by service.
+- **Unmapped items and codes missing from the price book block sign-off.** Accepting the flag doesn't get around it. A draft price book also blocks sign-off.
+- **Simpro CSV** export. The admin sets its columns, grouping and whether PC items and provisional sums are included. The Excel BOQ also gets a **Pricing** tab.
+- **Golden-job comparison:**
+  - Upload Peak's known final quantities (service, dn, material, qty) for a completed job, and enter its known total.
+  - The app reports the variance per service and per line, and on price.
+
 Phase 2's acceptance criteria are tested in `backend/tests/test_phase2_rules.py` and `test_phase2_checks.py`:
 
 - Every generated item traces to its rule and its source.
 - Every check-measure test triggers on a job seeded with faults.
 - Stage totals reconcile to service totals.
 
+Phase 3's are tested in `test_phase3_pricing.py`:
+
+- An imported price book reproduces a known estimate within ±1%.
+- Unmapped items block final pricing.
+
 ## Next phases (from the brief)
 
-3. Pricing: prebuild and rate import, mapping, labour, margins, price-book versions, Simpro CSV
 4. AI assistance: sheet classification, legend reading, run and fixture suggestions
 5. Revision compare, marked-up PDF export, Microsoft 365 single sign-on
 

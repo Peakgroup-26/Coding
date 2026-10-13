@@ -42,3 +42,6 @@ export function ortho(a: Pt, b: Pt): Pt {
   const len = Math.hypot(dx, dy);
   return [a[0] + Math.cos(snap) * len, a[1] + Math.sin(snap) * len];
 }
+
+export const fmtMoney = (v: number | undefined | null) =>
+  v === undefined || v === null ? "" : v.toLocaleString("en-AU", { style: "currency", currency: "AUD" });

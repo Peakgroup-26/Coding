@@ -110,3 +110,51 @@ export interface StageMatrix {
   service_totals: Record<string, number>;
   grand_total_m: number;
 }
+
+export interface PriceBook {
+  id: number; label: string; notes: string; created_at: string; locked: boolean; locked_at: string | null;
+  default_labour_rate_code: string; items: number; prebuilds: number; rates: number; jobs: number;
+}
+export interface PriceItem { id: number; version_id: number; code: string; description: string; uom: string; cost: number; supplier: string }
+export interface Prebuild {
+  id: number; version_id: number; code: string; description: string; uom: string; labour_hours: number;
+  labour_rate_code: string; components: { code: string; qty: number }[];
+}
+export interface LabourRate { id: number; version_id: number; code: string; description: string; rate: number }
+
+export type SourceKind = "pipe" | "count" | "fitting";
+export interface Mapping {
+  id: number; source_kind: SourceKind; service_code: string; material: string; dn: number | null; item_type: string;
+  description: string; target_kind: "prebuild" | "item"; target_code: string; factor: number; note: string;
+}
+
+export interface PricingLine {
+  kind: SourceKind; service_code: string; stage: string; description: string; qty: number; uom: string;
+  material: string; dn: number | null; item_type: string;
+  target_kind?: "prebuild" | "item"; target_code?: string; target_description?: string; target_qty?: number; factor?: number;
+  material_cost?: number; labour_hours?: number; labour_cost?: number; cost?: number; margin_pct?: number; sell?: number;
+  missing?: string[];
+}
+export interface Allowance {
+  id: number; kind: "pc" | "provisional" | "exclusion"; description: string; amount: number; service_code: string;
+  stage: string; apply_margin: boolean; margin_pct?: number; sell?: number;
+}
+export interface PricingSummary {
+  material_cost: number; labour_cost: number; labour_hours: number; allowances_cost: number; cost: number; margin: number;
+  sell_ex_gst: number; gst: number; sell_inc_gst: number;
+  by_service: { service_code: string; cost: number; sell: number; labour_hours: number }[];
+  by_stage: { stage: string; cost: number; sell: number; labour_hours: number }[];
+  reference_total_ex_gst?: number; reference_variance_pct?: number | null;
+}
+export interface Pricing {
+  price_book: { id: number; label: string; locked: boolean } | null;
+  margin_basis: "markup" | "margin";
+  lines: PricingLine[]; unmapped: PricingLine[]; missing_codes: string[]; allowances: Allowance[];
+  summary: PricingSummary | null;
+}
+
+export interface PricingJob extends Job {
+  price_book_version_id: number | null; margin_basis: "markup" | "margin"; default_margin_pct: number;
+  service_margins: Record<string, number> | null; stage_margins: Record<string, number> | null;
+  gst_pct: number; reference_total_ex_gst: number | null;
+}

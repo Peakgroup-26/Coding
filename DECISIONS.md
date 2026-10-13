@@ -77,3 +77,27 @@ These are choices made where the brief left room, as it asks. Each one can be re
 34. **Audit entries now store the job id,** so a job's log includes items that have since been deleted.
 
 35. **Schema:** Phase 2 adds tables and columns. The development database is created with `create_all`, which doesn't alter existing tables, so delete `backend/data/` after updating. Alembic migrations are needed before production. That's still a to-do.
+
+## Phase 3
+
+36. **Prices are versioned; mappings are not.** Price items, prebuilds and labour rates belong to a price-book version. Mappings point at codes, not rows, so one set of mappings works with every version. A job points at one version.
+
+37. **Draft, then locked.** Imports and edits only go into a draft version. Locking freezes it. A job can be priced on a draft while it's being checked, but sign-off needs a locked version.
+
+38. **The estimate is worked out live and not stored.** It's recalculated from the take-off, mappings and price book on every view, so it can't drift from the quantities. Once a job is final, both its quantities and its locked price book are frozen, so the figure can't change.
+
+39. **Money is Decimal, rounded to the cent per line.** Totals are sums of the rounded lines. GST is rounded once, on the total.
+
+40. **Pipe is priced on its total length:** plan plus vertical plus waste, the same figure as the BOQ.
+
+41. **Fitting lines are priced by exact description,** which is case-insensitive. When a rule names a catalogue item, that code is used without a mapping.
+
+42. **Prebuild cost** = Σ(component qty × component unit cost) + labour hours × rate. A component can be a catalogue item or another prebuild, nested up to 5 deep. If a prebuild has no labour rate code of its own, it uses the version's default rate. Codes the price book doesn't have are reported as missing, not priced at $0, and they block sign-off.
+
+43. **Margin precedence:** a stage margin beats a service margin, which beats the job default. "Markup" means sell = cost × (1 + p). "Margin" means sell = cost ÷ (1 − p). It is a per-job choice that defaults to markup. PC items and provisional sums take the margin for their service and stage, unless *add margin* is off.
+
+44. **Simpro CSV:** Simpro import layouts vary by setup, so the columns are an admin template, not a fixed format. The default is Part Number, Description, Type, Quantity, Unit Sell Price, Cost Centre (= stage), Section (= service). It needs checking against Peak's actual Simpro import before first use.
+
+45. **Price-book import column matching** ignores case and punctuation and uses common Simpro headings. Unknown layouts can name their columns as JSON. Rows with bad numbers are skipped and reported, and the rest are imported.
+
+46. **Golden-job comparison** compares known quantities against the take-off's total metres, including waste, per service and per line. The known total is compared with the estimate's sell price ex GST.

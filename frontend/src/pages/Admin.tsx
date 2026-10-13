@@ -121,6 +121,7 @@ export default function Admin() {
         </section>
 
         <Benchmarks />
+        <SimproTemplate />
         <Users />
       </div>
     </main>
@@ -245,6 +246,66 @@ function Benchmarks() {
           setForm({ name: "", codes: "", min: "", max: "" });
         }}>Add</button>
       </div>
+      {error && <p className="error">{error}</p>}
+    </section>
+  );
+}
+
+type Template = { columns: { header: string; field: string }[]; group_by_stage: boolean; group_by_service: boolean; include_allowances: boolean };
+
+function SimproTemplate() {
+  const [t, setT] = useState<Template | null>(null);
+  const [fields, setFields] = useState<Record<string, string>>({});
+  const [msg, setMsg] = useState("");
+  const [error, setError] = useState("");
+  useEffect(() => {
+    api.get<{ template: Template; fields: Record<string, string> }>("/api/settings/simpro-template").then((r) => { setT(r.template); setFields(r.fields); });
+  }, []);
+  if (!t) return null;
+  const setCol = (i: number, patch: Partial<Template["columns"][0]>) => setT({ ...t, columns: t.columns.map((c, j) => (j === i ? { ...c, ...patch } : c)) });
+  const move = (i: number, d: number) => {
+    const cols = [...t.columns];
+    const [c] = cols.splice(i, 1);
+    cols.splice(Math.max(0, Math.min(cols.length, i + d)), 0, c);
+    setT({ ...t, columns: cols });
+  };
+  const save = async () => {
+    setError(""); setMsg("");
+    try { await api.put("/api/settings/simpro-template", t); setMsg("Saved."); } catch (e) { setError((e as Error).message); }
+  };
+  return (
+    <section className="card">
+      <h2>Simpro CSV layout</h2>
+      <p className="muted small">Match the columns to the import format your Simpro is set up for. One row per prebuild or catalogue code.</p>
+      <table>
+        <thead><tr><th>Column heading</th><th>Value</th><th></th></tr></thead>
+        <tbody>
+          {t.columns.map((c, i) => (
+            <tr key={i}>
+              <td><input value={c.header} onChange={(e) => setCol(i, { header: e.target.value })} /></td>
+              <td>
+                <select value={c.field} onChange={(e) => setCol(i, { field: e.target.value })}>
+                  {Object.entries(fields).map(([k, label]) => <option key={k} value={k}>{label}</option>)}
+                </select>
+              </td>
+              <td className="actions">
+                <button className="link" onClick={() => move(i, -1)}>↑</button>
+                <button className="link" onClick={() => move(i, 1)}>↓</button>
+                <button className="link" onClick={() => setT({ ...t, columns: t.columns.filter((_, j) => j !== i) })}>Remove</button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div className="row wrap">
+        <button onClick={() => setT({ ...t, columns: [...t.columns, { header: "New column", field: "code" }] })}>Add column</button>
+        <label className="inline"><input type="checkbox" checked={t.group_by_stage} onChange={(e) => setT({ ...t, group_by_stage: e.target.checked })} /> Separate rows per stage</label>
+        <label className="inline"><input type="checkbox" checked={t.group_by_service} onChange={(e) => setT({ ...t, group_by_service: e.target.checked })} /> per service</label>
+        <label className="inline"><input type="checkbox" checked={t.include_allowances} onChange={(e) => setT({ ...t, include_allowances: e.target.checked })} /> Include PC items and provisional sums</label>
+        <span className="spacer" />
+        <button className="primary" onClick={save}>Save layout</button>
+      </div>
+      {msg && <p className="ok small">{msg}</p>}
       {error && <p className="error">{error}</p>}
     </section>
   );

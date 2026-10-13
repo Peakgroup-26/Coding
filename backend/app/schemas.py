@@ -112,6 +112,13 @@ class JobOut(ORM, JobIn):
     signed_off_by: int | None = None
     signed_off_at: datetime | None = None
     checks_run_at: datetime | None = None
+    price_book_version_id: int | None = None
+    margin_basis: str = "markup"
+    default_margin_pct: float = 0.0
+    service_margins: dict | None = None
+    stage_margins: dict | None = None
+    gst_pct: float = 10.0
+    reference_total_ex_gst: float | None = None
 
 
 class FileOut(ORM):
@@ -444,3 +451,105 @@ class AuditOut(ORM):
     before: dict | None
     after: dict | None
     at: datetime
+
+
+# --- Phase 3: pricing ---
+class PriceBookIn(BaseModel):
+    label: str
+    notes: str = ""
+    copy_from_id: int | None = None
+
+
+class PriceBookPatch(BaseModel):
+    label: str | None = None
+    notes: str | None = None
+    default_labour_rate_code: str | None = None
+
+
+class PriceBookOut(ORM):
+    id: int
+    label: str
+    notes: str
+    created_at: datetime
+    locked: bool
+    locked_at: datetime | None
+    default_labour_rate_code: str
+
+
+class PriceItemIn(BaseModel):
+    code: str
+    description: str = ""
+    uom: str = "ea"
+    cost: float = Field(ge=0)
+    supplier: str = ""
+
+
+class PriceItemOut(ORM, PriceItemIn):
+    id: int
+    version_id: int
+
+
+class PrebuildIn(BaseModel):
+    code: str
+    description: str = ""
+    uom: str = "ea"
+    labour_hours: float = Field(default=0, ge=0)
+    labour_rate_code: str = ""
+    components: list[dict] = []
+
+
+class PrebuildOut(ORM, PrebuildIn):
+    id: int
+    version_id: int
+
+
+class LabourRateIn(BaseModel):
+    code: str
+    description: str = ""
+    rate: float = Field(ge=0)
+
+
+class LabourRateOut(ORM, LabourRateIn):
+    id: int
+    version_id: int
+
+
+class MappingIn(BaseModel):
+    source_kind: str  # pipe | count | fitting
+    service_code: str = ""
+    material: str = ""
+    dn: int | None = None
+    item_type: str = ""
+    description: str = ""
+    target_kind: str  # prebuild | item
+    target_code: str
+    factor: float = Field(default=1.0, gt=0)
+    note: str = ""
+
+
+class MappingOut(ORM, MappingIn):
+    id: int
+
+
+class PricingSettingsIn(BaseModel):
+    price_book_version_id: int | None = None
+    margin_basis: str = "markup"
+    default_margin_pct: float = 0.0
+    service_margins: dict[str, float | None] = {}
+    stage_margins: dict[str, float | None] = {}
+    gst_pct: float = Field(default=10.0, ge=0, le=100)
+    reference_total_ex_gst: float | None = None
+
+
+class AllowanceIn(BaseModel):
+    kind: str  # pc | provisional | exclusion
+    description: str
+    amount: float = Field(default=0.0, ge=0)
+    service_id: int | None = None
+    stage_id: int | None = None
+    apply_margin: bool = True
+
+
+class AllowanceOut(ORM, AllowanceIn):
+    id: int
+    job_id: int
