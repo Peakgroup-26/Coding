@@ -1,8 +1,8 @@
 from .conftest import mm, pdf_bytes
 
 
-def new_job(client, **kw):
-    r = client.post("/api/jobs", json={"name": "Phase 2 job", "client": "Acme", **kw})
+def new_job(api, **kw):
+    r = api.post("/api/jobs", json={"name": "Phase 2 job", "client": "Acme", **kw})
     assert r.status_code == 200, r.text
     return r.json()
 

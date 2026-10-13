@@ -101,3 +101,35 @@ These are choices made where the brief left room, as it asks. Each one can be re
 45. **Price-book import column matching** ignores case and punctuation and uses common Simpro headings. Unknown layouts can name their columns as JSON. Rows with bad numbers are skipped and reported, and the rest are imported.
 
 46. **Golden-job comparison** compares known quantities against the take-off's total metres, including waste, per service and per line. The known total is compared with the estimate's sell price ex GST.
+
+## Phase 4
+
+47. **AI is opt-in and limited to sheet reading.** Drawings are commercial-in-confidence (a non-negotiable in the brief), so nothing goes to an outside service unless `TAKEOFF_AI=claude` is set. Run and fixture suggestions use local methods instead (vector analysis and image matching), which are fast and free, and work offline.
+
+48. **The AI sits behind an interface** (`SheetReader` in `ai.py`), so the provider or model can change without touching the rest. The Claude reader:
+    - sends the rendered sheet (scaled to a 2000 px long side) plus the PDF text layer
+    - asks for a JSON-schema structured output with effort `low`
+    - turns on the API's server-side refusal fallback
+    - treats a refusal, a cut-off response or an API error as "unavailable" for that sheet, not as a failure of the take-off
+
+49. **AI readings never overwrite a confirmed sheet.** They only fill fields the AI actually read. The raw reading, including the legend, is kept on the sheet for reference.
+
+50. **Classification accuracy is measured against people's confirmations.** The first proposal for a sheet is stored when it's made. The test set is every confirmed sheet, so the brief's 90% target can only be checked once Peak has confirmed real sheets.
+
+51. **Line styles are keyed by colour, line type, width and CAD layer,** taken from the PDF's vector paths. Styles assigned to a service are remembered per client, on the basis that consultants reuse their CAD standards.
+
+52. **Chaining suggested runs:**
+    - Segments join where exactly two meet and break at junctions and ends, so each polyline is one run and branches meet the main mid-run, as Phase 2's branch rule expects.
+    - Gaps of up to 4 pt between pieces pointing the same way are bridged, for dashes that CAD has exploded into separate lines.
+    - Pieces under 0.5 m are dropped.
+    - A suggestion that overlaps an existing run of the same service by more than 80% is skipped.
+    - Direction is arbitrary, so check the flow arrows on suggested drainage and use *Reverse direction*.
+
+53. **Symbol matching** uses normalised cross-correlation on the rendered sheet, trying the example at 0°, 90°, 180° and 270°. The match threshold and box size are adjustable. Matches near an existing count of the same item are skipped. It finds the same symbol at the same scale; it doesn't recognise a symbol drawn differently.
+
+54. **Outcome tracking:**
+    - *Accepted* means confirmed unchanged.
+    - *Edited* means changed while suggested, then confirmed.
+    - *Rejected* means deleted while suggested.
+
+    Manual items aren't counted.

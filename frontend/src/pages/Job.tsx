@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api, download } from "../api";
 import { useApp } from "../App";
-import type { Job, Level, Sheet, Totals } from "../types";
+import type { AiStats, AiStatus, Job, Level, Sheet, Totals } from "../types";
 import { fmtM } from "../util";
 import { Audit, Checks, Fittings, StageMatrixView } from "./Estimate";
 import { PricingTab } from "./Pricing";
@@ -107,6 +107,20 @@ function SheetRegister({ jobId }: { jobId: number }) {
 
   const visible = sheets.filter((s) => showAll || s.is_current);
 
+  const [ai, setAi] = useState<AiStatus | null>(null);
+  const [aiMsg, setAiMsg] = useState("");
+  useEffect(() => { api.get<AiStatus>("/api/ai/status").then(setAi); }, []);
+  const aiRead = async () => {
+    setBusy(true); setError(""); setAiMsg("");
+    try {
+      const r = await api.post<{ read: number; errors: { sheet_id: number; error: string }[] }>(`/api/jobs/${jobId}/ai-read`);
+      setAiMsg(`AI read ${r.read} unconfirmed sheet(s). Check and confirm each one.`);
+      if (r.errors.length) setError(r.errors.map((e) => e.error).join(" · "));
+      await load();
+    } catch (e) { setError((e as Error).message); }
+    finally { setBusy(false); }
+  };
+
   return (
     <section className="card">
       <div className="row">
@@ -115,6 +129,7 @@ function SheetRegister({ jobId }: { jobId: number }) {
           <span className="button primary">{busy ? "Splitting and reading sheets…" : "Upload drawings (PDF)"}</span>
         </label>
         <span className="muted">One combined PDF or many single-page PDFs, up to 200 MB each.</span>
+        {ai?.enabled && <button disabled={busy} onClick={aiRead} title="Sends unconfirmed sheets to the AI service to read title blocks, services and legends">Read sheets with AI</button>}
         <span className="spacer" />
         <label className="inline"><input type="checkbox" checked={showAll} onChange={(e) => setShowAll(e.target.checked)} /> Show superseded and duplicate sheets</label>
       </div>
@@ -157,7 +172,9 @@ function SheetRegister({ jobId }: { jobId: number }) {
           {visible.length === 0 && <tr><td colSpan={11} className="muted">No sheets yet. Upload drawings to start.</td></tr>}
         </tbody>
       </table>
+      {aiMsg && <p className="ok small">{aiMsg}</p>}
       <p className="muted small">Service codes: {settings.services.map((s) => s.code).join(", ")}</p>
+      <AiStatsView jobId={jobId} refreshKey={sheets} />
     </section>
   );
 }
@@ -261,5 +278,31 @@ export function TotalsTables({ t, compact }: { t: Totals; compact?: boolean }) {
         </p>
       )}
     </section>
+  );
+}
+
+function AiStatsView({ jobId, refreshKey }: { jobId: number; refreshKey: unknown }) {
+  const [s, setS] = useState<AiStats | null>(null);
+  useEffect(() => { api.get<AiStats>(`/api/jobs/${jobId}/ai-stats`).then(setS); }, [jobId, refreshKey]);
+  if (!s) return null;
+  const c = s.classification;
+  return (
+    <div className="ai-stats">
+      <h3>Suggestions and classification</h3>
+      <p className="small">
+        {c.sheets_confirmed
+          ? <>Of {c.sheets_confirmed} confirmed sheet(s), the first proposal had the right type and services on{" "}
+              <b className={(c.both_correct_pct ?? 0) >= c.target_pct ? "ok" : "warn"}>{c.both_correct_pct}%</b> (target {c.target_pct}%).{" "}
+              {Object.entries(c.by_source).map(([k, v]) => `${k}: ${v.correct_pct}% of ${v.sheets}`).join(" · ")}</>
+          : "Confirm sheets in the register to measure how often the proposed classification is right."}
+        {" "}AI reading is {s.ai.enabled ? `on (${s.ai.model})` : "off"}.
+      </p>
+      {s.sheets.length > 0 && (
+        <table className="r-cols">
+          <thead><tr><th>Sheet</th><th>Accepted</th><th>Edited</th><th>Rejected</th><th>Pending</th></tr></thead>
+          <tbody>{s.sheets.map((r) => <tr key={r.sheet_id}><td>{r.sheet_no}</td><td>{r.accepted}</td><td>{r.edited}</td><td>{r.rejected}</td><td>{r.pending}</td></tr>)}</tbody>
+        </table>
+      )}
+    </div>
   );
 }

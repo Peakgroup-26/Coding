@@ -144,6 +144,8 @@ def process_file(db: Session, drawing: DrawingFile) -> list[Sheet]:
             sheet.services_shown = prior.services_shown
             sheet.is_hydraulic = prior.is_hydraulic
             sheet.confidence = 0.9
+        sheet.proposed = {"classification": sheet.classification, "services": sheet.services_shown or [],
+                          "is_hydraulic": sheet.is_hydraulic, "source": "remembered" if prior else "keywords"}
         db.add(sheet)
         sheets.append(sheet)
 

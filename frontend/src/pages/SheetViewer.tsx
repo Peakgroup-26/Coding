@@ -7,6 +7,7 @@ import { useApp } from "../App";
 import type { CountItem, Flag, Job, Level, Pt, Run, Service, Sheet, Totals, Viewport } from "../types";
 import { SnapIndex, dist, fmtM, ortho, polyLength } from "../util";
 import { TotalsTables } from "./Job";
+import { AiAssist } from "./AiAssist";
 
 type Tool = "pan" | "calibrate" | "verify" | "trace" | "riser" | "count" | "viewport";
 type ScaleTarget = { kind: "sheet" } | { kind: "viewport"; id: number };
@@ -21,6 +22,7 @@ export default function SheetViewer() {
   const [flags, setFlags] = useState<Flag[]>([]);
   const [job, setJob] = useState<Job | null>(null);
   const [pin, setPin] = useState<Pt | null>(null); // a location linked to from a flag
+  const [highlight, setHighlight] = useState<[number, number, number, number] | null>(null); // a line style's extent
   const { settings } = useApp();
   const services = settings.services.filter((s) => s.active);
   const serviceById = useMemo(() => new Map(settings.services.map((s) => [s.id, s])), [settings.services]);
@@ -437,6 +439,8 @@ export default function SheetViewer() {
                     x={-2.5 / view.scale} y={-6.5 / view.scale} />
                 </Group>
               ))}
+              {highlight && <Rect x={highlight[0] - 4} y={highlight[1] - 4} width={highlight[2] - highlight[0] + 8} height={highlight[3] - highlight[1] + 8}
+                fill="rgba(47,111,214,0.12)" stroke="#2f6fd6" strokeWidth={2 / view.scale} listening={false} />}
               {pin && <Circle x={pin[0]} y={pin[1]} radius={18 / view.scale} stroke="#2f6fd6" strokeWidth={3 / view.scale} dash={[5 / view.scale, 4 / view.scale]} listening={false} />}
               {/* Draft geometry */}
               {draft.length > 0 && tool === "trace" && (
@@ -565,6 +569,9 @@ export default function SheetViewer() {
               {runs.length + counts.length === 0 && <li className="muted">Nothing measured yet.</li>}
             </ul>
           </section>
+
+          <AiAssist sheet={sheet} runs={runs} counts={counts} selectedCount={selCount} onChanged={refresh}
+            onHighlight={setHighlight} onError={err} />
 
           {flags.length > 0 && (
             <section>
@@ -725,7 +732,7 @@ function RunEditor({ run, levels, services, onSaved, onError, onDelete }: {
           </button>
         )}
         <span className="spacer" />
-        <button className="danger" onClick={onDelete}>Delete (Del)</button>
+        <button className="danger" onClick={onDelete}>{run.status === "suggested" ? "Reject" : "Delete (Del)"}</button>
       </div>
     </section>
   );
@@ -755,7 +762,7 @@ function CountEditor({ item, services, onSaved, onError, onDelete }: {
           ? <button className="primary" onClick={() => save({ status: "confirmed" })}>Confirm</button>
           : <span className="ok small">Confirmed</span>}
         <span className="spacer" />
-        <button className="danger" onClick={onDelete}>Delete (Del)</button>
+        <button className="danger" onClick={onDelete}>{item.status === "suggested" ? "Reject" : "Delete (Del)"}</button>
       </div>
     </section>
   );
