@@ -4,6 +4,9 @@ import { api, getToken, setToken } from "./api";
 import type { Settings, User } from "./types";
 import Login from "./pages/Login";
 import Jobs from "./pages/Jobs";
+import Home from "./pages/Home";
+import JobOverview from "./pages/JobOverview";
+import CivilRates from "./pages/CivilRates";
 import JobPage from "./pages/Job";
 import SheetViewer from "./pages/SheetViewer";
 import Admin from "./pages/Admin";
@@ -55,19 +58,29 @@ export default function App() {
         <header className="topbar">
           <Link to="/" className="brand">Peak Take-off</Link>
           <nav>
-            <Link to="/">Jobs</Link>
-            <Link to="/rules">Rules</Link>
+            <Link to="/">Home</Link>
+            <Link to="/civil-rates">Civil rates</Link>
             <Link to="/price-books">Price books</Link>
-            <Link to="/mappings">Mappings</Link>
-            {user.role === "admin" && <Link to="/admin">Admin</Link>}
+            <details className="more">
+              <summary>More</summary>
+              <div className="menu" onClick={(e) => (e.currentTarget.parentElement as HTMLDetailsElement).open = false}>
+                <Link to="/rules">Fitting rules</Link>
+                <Link to="/mappings">Price mappings</Link>
+                <Link to="/jobs">Jobs (set up by hand)</Link>
+                {user.role === "admin" && <Link to="/admin">Admin settings</Link>}
+              </div>
+            </details>
           </nav>
           <span className="spacer" />
           <span className="muted">{user.name || user.email} · {user.role}</span>
           <button className="link" onClick={logout}>Sign out</button>
         </header>
         <Routes>
-          <Route path="/" element={<Jobs />} />
-          <Route path="/jobs/:jobId" element={<JobPage />} />
+          <Route path="/" element={<Home />} />
+          <Route path="/jobs" element={<Jobs />} />
+          <Route path="/jobs/:jobId" element={<JobOverview />} />
+          <Route path="/jobs/:jobId/details" element={<JobPage />} />
+          <Route path="/civil-rates" element={<CivilRates />} />
           <Route path="/sheets/:sheetId" element={<SheetViewer />} />
           <Route path="/rules" element={<Rules />} />
           <Route path="/price-books" element={<PriceBooks />} />

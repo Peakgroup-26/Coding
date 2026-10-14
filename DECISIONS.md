@@ -155,3 +155,23 @@ These are choices made where the brief left room, as it asks. Each one can be re
 62. **CI** runs lint (pyflakes), then the backend tests on SQLite and on PostgreSQL 16, then the frontend typecheck and build.
 
 63. **The Docker image** builds the frontend in a Node stage and runs on `python:3.12-slim` as a non-root user. It has a health check and trusts proxy headers, so HTTPS termination in front gives correct redirect URLs for sign-on. The compose file is for a single server or a trial. A larger deployment would use managed PostgreSQL (e.g. RDS in Sydney) and S3.
+
+## Autopilot and civil BOQ
+
+64. **"Fully AI driven" still keeps the sign-off.** The brief's non-negotiable 2 (a person signs off AI suggestions) stays. The autopilot does all the reading, scaling, tracing and counting, but its work arrives as suggestions behind one *Approve everything* button. One click is the least sign-off there can be while a person still owns the numbers.
+
+65. **Automatic scale confirmation uses the drawing's own dimensions.** The second dimension the brief requires is a dimension string on the sheet (e.g. "3600") beside a parallel line whose length matches at the stated scale. Two matches within 1% confirm it. Any dimension within 10% but outside 1% counts as a disagreement and blocks it (non-negotiable 3). A sheet it can't confirm is never measured; it goes on the "Needs you" list.
+
+66. **The AI names line styles; the app measures them.** The AI only says which colour, dash or layer is which service, DN and material, and only assignments it rates at 0.5 confidence or above are used. The lengths come from the PDF's vector geometry at the verified scale, never from the AI. Styles are only saved as the client's mapping once their runs are approved.
+
+67. **Counts come from text tags, not from the AI pointing at the drawing.** Vision models aren't reliable at giving positions. The AI says which tag means which item (FW = floor waste); the app finds every tag in the PDF's text layer and places a count there. Tags in a legend line or the title block are skipped. Symbol-only items are still counted with *click one, find the rest* (Phase 4).
+
+68. **Civil quantities are read, never estimated.** The AI lists only quantities written on the sheet (schedules, long sections, labels) and says where each came from. The AI groups duplicates across sheets and says whether to count once or add up; the app does the arithmetic. A group mixing units is rejected.
+
+69. **Civil rates are the median of the matching past rates,** with each source job listed. Without AI the match is on wording (shared words, the same unit, and the same sizes). With AI, the model picks from the eight best wording matches, so it can't pick a rate that isn't in Peak's history.
+
+70. **Re-reading never overwrites approved civil quantities.** New readings attach to the approved line (same unit, similar wording), and a change adds a note for a person to act on.
+
+71. **The autopilot runs in background threads in the app process** (`AUTOPILOT_WORKERS`, default 2). This suits one server. If the server restarts mid-read, the job shows *interrupted* with a button to carry on. A blank API key turns the AI off rather than failing the read, and one sheet the AI can't read doesn't stop the rest.
+
+72. **Deployment on Plesk:** the app container listens on `127.0.0.1` only, and Plesk's nginx forwards the subdomain to it over HTTPS (Let's Encrypt). Docker is installed from Docker's own apt repository if Plesk hasn't already installed it. Backups (database, drawings, settings) run nightly to `/var/backups/peak-takeoff` and are kept for 14 days. They should also be copied off the server.

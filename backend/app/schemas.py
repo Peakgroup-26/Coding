@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -95,6 +96,7 @@ class JobIn(BaseModel):
     quote_no: str = ""
     due_date: date | None = None
     status: str = "draft"
+    kind: Literal["hydraulic", "civil"] = "hydraulic"
 
 
 class JobPatch(BaseModel):
@@ -119,6 +121,8 @@ class JobOut(ORM, JobIn):
     stage_margins: dict | None = None
     gst_pct: float = 10.0
     reference_total_ex_gst: float | None = None
+    created_at: datetime | None = None
+    autopilot: dict | None = None
 
 
 class FileOut(ORM):

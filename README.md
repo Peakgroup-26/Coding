@@ -1,8 +1,33 @@
 # Peak Hydraulic Take-off & Estimating
 
-A web app for Peak Plumbing & Gas Services that turns commercial hydraulic drawings into measured, staged quantities, and later a priced estimate. It follows the build brief "Hydraulic Take-off & Estimating System — Build Brief for Codex".
+A web app for Peak Plumbing & Gas Services that turns commercial hydraulic drawings into measured, staged quantities and a priced estimate, and civil plans into a bill of quantities priced from Peak's previous civil jobs. It follows the build brief "Hydraulic Take-off & Estimating System — Build Brief for Codex".
 
-**Status: all five phases in the brief are built:** core take-off, rules and check-measure, pricing, AI assistance, and polish. They have been tested on generated drawings; tuning against Peak's real drawings and data comes next (see "Before going live").
+**Status: all five phases in the brief are built,** plus the autopilot ("drop the plans in") and the civil BOQ. They have been tested on generated drawings; tuning against Peak's real drawings and data comes next (see "Before going live").
+
+**Putting it on the Plesk server:** see [deploy/PLESK.md](deploy/PLESK.md).
+
+## Drop the plans in (autopilot)
+
+The home page has two drop zones: **Hydraulic take-off** and **Civil BOQ**. Drop the whole PDF set on one, and the job is created and read in the background while a progress screen shows where it's up to.
+
+For a **hydraulic** set, the autopilot:
+
+1. splits the PDFs into sheets and has the AI read each one: number, title, revision, scale, sheet type and services;
+2. sets each plan's scale from its title block, then **confirms it against dimension strings on the sheet**. Two or more dimensions must agree within 1%, and any nearby dimension that disagrees stops it. If it can't confirm a scale, the plan goes on the "Needs you" list for a two-click check instead of being measured;
+3. works out which line colours and layers are which pipes (service, DN, material) from the legend, the layer names and the labels, and traces them into runs;
+4. counts items tagged with text on the plan (FW, IO, HR …), leaving out the legend and title block.
+
+The overview then shows what it found, what needs you, and three steps: **check it on the drawings**, **approve everything**, and **download the Excel BOQ** (or Simpro CSV). Nothing the AI finds counts until it's approved. Approving also saves the line colours for that client, so the next set from the same consultant is read the same way without asking the AI.
+
+## Civil BOQ
+
+1. **Load previous jobs' rates** (*Civil rates* in the menu): drop in the priced BOQs from past civil jobs, Excel or CSV. Any layout works if it has a header row with *Description* and *Rate* (*Unit* and *Qty* are used too). Section headings become categories.
+2. **Drop the civil plans** on the *Civil BOQ* zone. The AI reads each sheet and lists the quantities written on it: pit and pipe schedules, long sections, labelled lengths and areas. It never estimates. Anything it can see but can't quantify is listed as *needs a quantity*.
+3. **Duplicates are merged:** a pipe on the plan and on its long section is counted once. The AI decides which items are the same work; the app does the arithmetic.
+4. **Each line is priced** from the matching rates in previous jobs (the middle value). It shows which jobs those rates came from, and you can type over any quantity or rate.
+5. **Approve** lines one at a time or all together, then **download the Excel BOQ**: priced lines by category with subtotals, plus tabs for unapproved lines and for every quantity by sheet.
+
+Reading the plans again (for example, a new revision) keeps approved lines and typed-in rates. If the new reading differs, it adds a note to the line instead of changing an approved quantity.
 
 ## What Phase 1 does
 
@@ -155,14 +180,8 @@ Everything here only *suggests*. Suggestions are drawn dashed, labelled, and sta
   - waste % per material
   - benchmarks
 - **Match the Simpro CSV layout** to Peak's actual Simpro import.
-- **Production setup.** These are built and tested, but still need choosing and setting up:
-  - hosting
-  - HTTPS in front of the app
-  - PostgreSQL backups
-  - the S3 bucket and its credentials
-  - a fixed `SECRET_KEY`
-
-  A background queue for very large uploads is still to do if they turn out slow.
+- **Production setup:** follow [deploy/PLESK.md](deploy/PLESK.md). It covers HTTPS, the settings file with random secrets, nightly backups and updates. The AI needs an Anthropic API key; without one the app runs, but sorts sheets by keywords only and takes nothing off automatically.
+- **Check the autopilot on real sets.** Watch how often it confirms scales from dimensions and names the line colours correctly on Peak's consultants' drawings, and tune it from there. Civil quantities should be spot-checked against the schedules on the first few jobs.
 - **Have a developer review the code and hosting,** as the brief recommends.
 
 Peak's inputs (the brief's "Inputs Peak must supply") are needed now, especially the fitting and sundry rules, the Simpro prebuild export, the rates, and three completed jobs for the golden-job test.
@@ -195,7 +214,7 @@ cp .env.example .env      # fill in SECRET_KEY, POSTGRES_PASSWORD, ADMIN_EMAIL, 
 docker compose up --build -d
 ```
 
-This runs the app (API plus built frontend, as a non-root user) and PostgreSQL 16. Drawings go in the `files` volume, or in S3 with `STORAGE_BACKEND=s3`. Put HTTPS in front of it.
+This runs the app (API plus built frontend, as a non-root user) and PostgreSQL 16. Drawings go in the `files` volume, or in S3 with `STORAGE_BACKEND=s3`. The app only listens on `127.0.0.1`, so put HTTPS in front of it. On the Plesk server, `deploy/install.sh` does all of this and `deploy/PLESK.md` explains each step.
 
 ### Database migrations
 
@@ -261,6 +280,10 @@ backend/app/
   pricebook_import.py CSV/Excel price list, prebuild and rate import
   simpro.py           Simpro CSV
   ai.py, suggest.py   AI sheet reading; line-style and symbol suggestions
+  assist.py           AI steps shared by the sheet tools and the autopilot
+  autopilot.py        drop-the-plans-in pipeline (runs in the background)
+  autoscale.py        confirms a scale against dimension strings on the sheet
+  civil.py            civil BOQ: rate import, merging, pricing from past jobs, export
   revision.py         revision compare
   markup.py           marked-up PDF
   sso.py              Microsoft 365 sign-on
@@ -272,6 +295,7 @@ backend/migrations/   Alembic migrations
 backend/tests/        unit and acceptance tests
 frontend/src/         React + TypeScript app (Konva canvas for the take-off overlay)
 docs/                 fitting rules template, sample price book
+deploy/               Plesk guide, install / update / backup scripts, nginx settings
 DECISIONS.md          assumptions and choices made where the brief left room
 ```
 

@@ -91,6 +91,9 @@ class Job(Base):
     signed_off_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     checks_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    kind: Mapped[str] = mapped_column(String(20), default="hydraulic", server_default="hydraulic")  # hydraulic | civil
+    # Progress of the automatic read: {state, step, done, total, started_at, finished_at, attention: [...], summary}
+    autopilot: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     files: Mapped[list["DrawingFile"]] = relationship(back_populates="job", cascade="all, delete-orphan")
     levels: Mapped[list["Level"]] = relationship(back_populates="job", cascade="all, delete-orphan")
@@ -476,3 +479,70 @@ class AiOutcome(Base):
     kind: Mapped[str] = mapped_column(String(10))  # run | count
     outcome: Mapped[str] = mapped_column(String(10))  # accepted | edited | rejected
     at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+# --- Civil BOQ ---
+class CivilRateSet(Base):
+    """Rates from one previous civil job (or a rate schedule), imported from a spreadsheet."""
+    __tablename__ = "civil_rate_sets"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(255))
+    source_file: Mapped[str] = mapped_column(String(500), default="")
+    job_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    notes: Mapped[str] = mapped_column(Text, default="")
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    rates: Mapped[list["CivilRate"]] = relationship(back_populates="rate_set", cascade="all, delete-orphan")
+
+
+class CivilRate(Base):
+    __tablename__ = "civil_rates"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    set_id: Mapped[int] = mapped_column(ForeignKey("civil_rate_sets.id", ondelete="CASCADE"), index=True)
+    code: Mapped[str] = mapped_column(String(100), default="")
+    category: Mapped[str] = mapped_column(String(200), default="")
+    description: Mapped[str] = mapped_column(String(1000))
+    unit: Mapped[str] = mapped_column(String(20), default="")
+    rate: Mapped[float] = mapped_column(Float)
+    qty: Mapped[float | None] = mapped_column(Float, nullable=True)  # the quantity on that job, for reference
+
+    rate_set: Mapped[CivilRateSet] = relationship(back_populates="rates")
+
+
+class CivilTakeoffItem(Base):
+    """A quantity the AI (or a person) read from one civil sheet."""
+    __tablename__ = "civil_takeoff_items"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id", ondelete="CASCADE"), index=True)
+    sheet_id: Mapped[int | None] = mapped_column(ForeignKey("sheets.id", ondelete="CASCADE"), nullable=True, index=True)
+    category: Mapped[str] = mapped_column(String(200), default="")
+    description: Mapped[str] = mapped_column(String(1000))
+    unit: Mapped[str] = mapped_column(String(20), default="")
+    qty: Mapped[float] = mapped_column(Float, default=0.0)
+    basis: Mapped[str] = mapped_column(Text, default="")
+    confidence: Mapped[float] = mapped_column(Float, default=0.0)
+    needs_measuring: Mapped[bool] = mapped_column(Boolean, default=False)
+    line_id: Mapped[int | None] = mapped_column(ForeignKey("civil_boq_lines.id", ondelete="SET NULL"), nullable=True)
+
+
+class CivilBoqLine(Base):
+    __tablename__ = "civil_boq_lines"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id", ondelete="CASCADE"), index=True)
+    sort: Mapped[int] = mapped_column(Integer, default=0)
+    category: Mapped[str] = mapped_column(String(200), default="")
+    description: Mapped[str] = mapped_column(String(1000))
+    unit: Mapped[str] = mapped_column(String(20), default="")
+    qty: Mapped[float] = mapped_column(Float, default=0.0)  # as read: sum or max of its takeoff items
+    combine: Mapped[str] = mapped_column(String(10), default="sum")  # sum | max
+    overridden_qty: Mapped[float | None] = mapped_column(Float, nullable=True)
+    rate: Mapped[float | None] = mapped_column(Float, nullable=True)  # suggested from history, or typed in
+    rate_overridden: Mapped[bool] = mapped_column(Boolean, default=False)
+    rate_sources: Mapped[list | None] = mapped_column(JSON, nullable=True)  # [{rate_id, set, description, unit, rate}]
+    rate_note: Mapped[str] = mapped_column(Text, default="")
+    needs_measuring: Mapped[bool] = mapped_column(Boolean, default=False)
+    status: Mapped[str] = mapped_column(String(20), default="suggested")  # suggested | confirmed
+    source: Mapped[str] = mapped_column(String(20), default="ai")  # ai | manual
+    note: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

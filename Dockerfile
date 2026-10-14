@@ -19,6 +19,6 @@ RUN useradd --system --uid 1001 app && mkdir -p /data && chown app /data
 USER app
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"
-# One process: migrations run on startup. Scale by running more containers behind a load
-# balancer with STORAGE_BACKEND=s3 and a shared PostgreSQL.
+# One process: migrations run on startup, and the autopilot reads plans in background threads
+# inside it (AUTOPILOT_WORKERS at a time).
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips", "*"]

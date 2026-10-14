@@ -34,4 +34,8 @@ RENDER_MAX_PX = int(os.environ.get("RENDER_MAX_PX", "5000"))
 # Scale check tolerance (fraction). Brief: block measuring when out by more than 1%.
 SCALE_TOLERANCE = 0.01
 
+# Autopilot (the "drop the plans in" read). Jobs run in the background, this many at a time.
+AUTOPILOT_WORKERS = int(os.environ.get("AUTOPILOT_WORKERS", "2"))
+AUTOPILOT_SYNC = os.environ.get("AUTOPILOT_SYNC", "") == "1"  # run inline (tests)
+
 CORS_ORIGINS = [o for o in os.environ.get("CORS_ORIGINS", "http://localhost:5173").split(",") if o]

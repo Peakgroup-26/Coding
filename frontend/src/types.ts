@@ -11,7 +11,33 @@ export interface Job {
   id: number; name: string; client: string; builder: string; address: string;
   quote_no: string; due_date: string | null; status: string;
   signed_off_by: number | null; signed_off_at: string | null; checks_run_at: string | null;
+  kind?: "hydraulic" | "civil"; created_at?: string | null; autopilot?: AutopilotStatus | null;
 }
+
+export interface Attention { kind: string; message: string; sheet_id?: number; sheet?: string }
+
+export interface AutopilotStatus {
+  state: "never" | "queued" | "running" | "done" | "failed" | "interrupted";
+  step?: string; done?: number; total?: number; error?: string;
+  started_at?: string; finished_at?: string;
+  attention?: Attention[];
+  summary?: Record<string, number>;
+  running?: boolean;
+}
+
+export interface CivilItem { id: number; sheet_id: number | null; sheet: string; description: string; unit: string; qty: number; basis: string; confidence: number }
+export interface RateSource { rate_id: number; job: string; description: string; unit: string; rate: number }
+export interface CivilLine {
+  id: number; sort: number; category: string; description: string; unit: string;
+  qty: number; overridden_qty: number | null; effective_qty: number; combine: string;
+  rate: number | null; rate_overridden: boolean; rate_sources: RateSource[]; rate_note: string;
+  amount: number; needs_measuring: boolean; status: "suggested" | "confirmed"; source: string; note: string;
+  items: CivilItem[];
+}
+export interface CivilSummary { lines: number; lines_suggested: number; lines_confirmed: number; needs_measuring: number; unpriced: number; total_confirmed_ex_gst: number }
+export interface CivilBoq { lines: CivilLine[]; summary: CivilSummary; categories: string[]; units: string[] }
+export interface RateSet { id: number; name: string; source_file: string; job_date: string | null; notes: string; active: boolean; created_at: string; rates: number }
+export interface CivilRate { id: number; code: string; category: string; description: string; unit: string; rate: number; qty: number | null }
 
 export interface Level { id: number; job_id: number; name: string; rl: number; floor_to_floor_m: number }
 

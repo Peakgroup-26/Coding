@@ -166,3 +166,81 @@ a.button.ms:hover { text-decoration: none; background: #111; }
 .help-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.35); display: grid; place-items: center; z-index: 50; }
 .help-overlay .card { max-width: 520px; width: calc(100% - 32px); }
 .help-overlay kbd { display: inline-block; min-width: 22px; padding: 1px 6px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; background: #f6f8fb; font-size: 12px; text-align: center; }
+
+/* --- Phase 7: drop the plans in --- */
+.topbar details.more { position: relative; }
+.topbar details.more summary { cursor: pointer; list-style: none; }
+.topbar details.more summary::after { content: " ▾"; }
+.topbar details.more .menu { position: absolute; top: 26px; left: 0; z-index: 20; background: #fff; border: 1px solid var(--line);
+  border-radius: 6px; box-shadow: 0 6px 20px rgba(0,0,0,.15); padding: 6px 0; min-width: 210px; display: flex; flex-direction: column; }
+.topbar details.more .menu a { color: var(--text); padding: 7px 14px; }
+.topbar details.more .menu a:hover { background: var(--bg); text-decoration: none; }
+
+.home .hero { margin-bottom: 18px; }
+.home .hero h1 { font-size: 28px; }
+.home .job-details input { min-width: 260px; padding: 8px 10px; font-size: 15px; }
+.dropzones { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 12px; }
+@media (max-width: 800px) { .dropzones { grid-template-columns: 1fr; } }
+.dropzone { border: 3px dashed #b6c3d6; border-radius: 14px; background: #fff; padding: 34px 20px; text-align: center; cursor: pointer;
+  transition: border-color .15s, background .15s, transform .15s; }
+.dropzone:hover, .dropzone.over { border-color: var(--accent); background: #eef4ff; transform: translateY(-2px); }
+.dropzone.civil:hover, .dropzone.civil.over { border-color: #9a6a12; background: #fff7e8; }
+.dropzone.busy { opacity: .6; cursor: progress; }
+.dropzone h2 { font-size: 22px; margin: 6px 0; }
+.dropzone p { margin: 4px 0; }
+.dropzone .dz-icon { font-size: 44px; }
+.dropzone .dz-hint { color: var(--muted); font-size: 13px; margin-top: 10px; }
+.dropzone.small-zone { padding: 20px; margin-top: 10px; }
+.upload-progress { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
+.bar { flex: 1; height: 10px; background: #e3e8f0; border-radius: 5px; overflow: hidden; }
+.bar > div { height: 100%; background: var(--accent); transition: width .3s; }
+.bar > div.indeterminate { animation: slide 1.4s infinite ease-in-out; }
+@keyframes slide { from { margin-left: -30%; } to { margin-left: 100%; } }
+p.big { font-size: 15px; }
+
+.job-list { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.job-card { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; color: var(--text); }
+.job-card:hover { border-color: var(--accent); text-decoration: none; background: #f8fbff; }
+.job-card .job-name { font-weight: 600; font-size: 15px; }
+.badge { display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px; background: #e3e8f0; color: var(--text); }
+.badge.hyd { background: #dceaff; color: #1d4f91; }
+.badge.civil { background: #fbecd0; color: #7a4f00; }
+.badge.final, .badge.ok { background: #d6f0de; color: var(--ok); }
+.status { font-size: 13px; font-weight: 600; }
+.status.busy { color: var(--accent); }
+.status.ok { color: var(--ok); }
+.status.warn { color: var(--warn); }
+.status.bad { color: var(--bad); }
+
+.overview .title-row h1 { margin: 6px 0; font-size: 26px; }
+.autopilot-progress { display: flex; gap: 18px; align-items: center; border-color: var(--accent); }
+.autopilot-progress h2 { margin: 0 0 4px; }
+.spinner { width: 34px; height: 34px; border: 4px solid #dce5f3; border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin: 14px 0; }
+.tile { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 2px; }
+.tile b { font-size: 24px; }
+.tile span { color: var(--muted); }
+.tile.warn { border-color: #f0c879; background: #fffaf0; }
+.tile.ok { border-color: #a9dcb9; }
+.needs-you { border-color: #f0c879; background: #fffaf0; }
+.needs-you ul { margin: 0; padding-left: 20px; }
+.needs-you li { margin: 6px 0; }
+.bad-card { border-color: var(--bad); }
+.warn-card { border-color: var(--warn); }
+.big-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+button.big, .button.big { padding: 12px 18px; font-size: 15px; border-radius: 8px; }
+.footer-actions { margin-top: 10px; gap: 10px; }
+
+table.boq td, table.boq th { vertical-align: middle; }
+table.boq .r, table .r { text-align: right; font-variant-numeric: tabular-nums; }
+table.boq tr.cat td { background: #f0f3f8; font-weight: 700; padding-top: 8px; }
+table.boq tr.suggested td { background: #fffbea; }
+table.boq tr.measure td { background: #fff1dc; }
+table.boq tr.detail td { background: #fafbfd; }
+table.boq td.desc { cursor: pointer; min-width: 280px; }
+table.boq input.num { text-align: right; width: 100px; }
+.tag { display: inline-block; margin-left: 8px; font-size: 11px; padding: 1px 6px; border-radius: 8px; background: #fde7c4; }
+.chip { display: inline-block; margin: 1px 3px 1px 0; padding: 1px 6px; border: 1px solid var(--line); border-radius: 8px; font-size: 11px; }
+.add-line { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--line); }
+table.inner { background: #fafbfd; }
