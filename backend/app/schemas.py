@@ -144,6 +144,11 @@ class JobOut(ORM, JobIn):
     created_at: datetime | None = None
     autopilot: dict | None = None
     created_by: int | None = None
+    start_date: date | None = None
+    target_weeks: float | None = None
+    program: dict | None = None
+    tender_result: str = "pending"
+    tender_value: float | None = None
 
 
 class FileOut(ORM):

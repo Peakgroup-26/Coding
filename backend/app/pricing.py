@@ -97,17 +97,18 @@ class Source:
     catalogue_code: str = ""  # a rule's output item, when set
 
 
-def collect_sources(db: Session, job_id: int) -> list[Source]:
-    """Confirmed quantities on current sheets, grouped by what they are and their stage."""
+def collect_sources(db: Session, job_id: int, include_suggested: bool = False) -> list[Source]:
+    """Confirmed quantities on current sheets (plus suggestions if asked), grouped by what they are and their stage."""
+    ok = ("confirmed", "suggested") if include_suggested else ("confirmed",)
     current = set(db.scalars(select(Sheet.id).where(Sheet.job_id == job_id, Sheet.is_current.is_(True))))
     pipes: dict[tuple, Decimal] = defaultdict(Decimal)
     for r in db.scalars(select(Run).where(Run.job_id == job_id)):
-        if r.sheet_id in current and r.status == "confirmed":
+        if r.sheet_id in current and r.status in ok:
             total = d2(r.length_m) + d2(r.vertical_m) + run_waste_m(r)
             pipes[(r.service_id, r.material, r.dn, r.stage_id)] += total
     counts: dict[tuple, int] = defaultdict(int)
     for c in db.scalars(select(CountItem).where(CountItem.job_id == job_id)):
-        if c.sheet_id in current and c.status == "confirmed":
+        if c.sheet_id in current and c.status in ok:
             counts[(c.service_id, c.item_type, c.stage_id)] += 1
     catalogue = {c.id: c.code for c in db.scalars(select(CatalogueItem))}
     fittings: dict[tuple, Decimal] = defaultdict(Decimal)

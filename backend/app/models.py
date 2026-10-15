@@ -99,6 +99,12 @@ class Job(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     kind: Mapped[str] = mapped_column(String(20), default="hydraulic", server_default="hydraulic")  # hydraulic | civil
     created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    # Program and tender outcome (reports.py)
+    start_date: Mapped[date | None] = mapped_column(Date, nullable=True)  # planned start on site
+    target_weeks: Mapped[float | None] = mapped_column(Float, nullable=True)  # finish within this many weeks
+    program: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # crew and per-stage overrides
+    tender_result: Mapped[str] = mapped_column(String(20), default="pending", server_default="pending")  # pending | won | lost | withdrawn
+    tender_value: Mapped[float | None] = mapped_column(Float, nullable=True)  # price submitted, ex GST
     # Progress of the automatic read: {state, step, done, total, started_at, finished_at, attention: [...], summary}
     autopilot: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     # Set by accepted tender requirements (tender.py):
@@ -651,3 +657,26 @@ class ChatMessage(Base):
     hidden: Mapped[bool] = mapped_column(Boolean, default=False)  # tool results and the like
     user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class ProductivityRate(Base):
+    """Labour hours per unit of work, for labour reports and programs when the price book has no
+    labour for an item. Peak's own figures: none are built in.
+
+    Hydraulic pipe: service_code (+ DN range, material). Hydraulic items: item_type.
+    Civil: civil_category (+ unit and a keyword in the description). The most specific match wins.
+    """
+    __tablename__ = "productivity_rates"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    kind: Mapped[str] = mapped_column(String(20), default="hydraulic")  # hydraulic | civil
+    service_code: Mapped[str] = mapped_column(String(20), default="")
+    dn_min: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    dn_max: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    material: Mapped[str] = mapped_column(String(100), default="")
+    item_type: Mapped[str] = mapped_column(String(100), default="")
+    civil_category: Mapped[str] = mapped_column(String(200), default="")
+    keyword: Mapped[str] = mapped_column(String(100), default="")
+    unit: Mapped[str] = mapped_column(String(20), default="")
+    hours_per_unit: Mapped[float] = mapped_column(Float)
+    note: Mapped[str] = mapped_column(String(300), default="")
+    active: Mapped[bool] = mapped_column(Boolean, default=True)

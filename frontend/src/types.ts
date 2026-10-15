@@ -20,6 +20,8 @@ export interface Job {
   quote_no: string; due_date: string | null; status: string;
   signed_off_by: number | null; signed_off_at: string | null; checks_run_at: string | null;
   kind?: "hydraulic" | "civil"; created_at?: string | null; autopilot?: AutopilotStatus | null; created_by?: number | null;
+  start_date?: string | null; target_weeks?: number | null; program?: Record<string, unknown> | null;
+  tender_result?: "pending" | "won" | "lost" | "withdrawn"; tender_value?: number | null;
 }
 
 export interface Attention { kind: string; message: string; sheet_id?: number; sheet?: string }

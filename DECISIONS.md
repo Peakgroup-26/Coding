@@ -205,3 +205,19 @@ These are choices made where the brief left room, as it asks. Each one can be re
 84. **Memory is plain sentences people can read and edit,** scoped to company, client or job. The AI decides when to save one (preferences, rules, corrections), and admins can edit, switch off or add their own. Memories feed both the chat and the autopilot's reads.
 
 85. **Speech uses the browser's built-in recognition** rather than another cloud service, because the Claude API doesn't transcribe audio. It needs HTTPS (the Plesk setup has it) and works in Chrome, Edge and Safari. Chrome and Edge send the audio to Google or Microsoft for recognition. Replies can be read aloud with the browser's speech synthesis, which runs on the device.
+
+## Reports
+
+86. **Labour hours are never invented.** The price book's prebuild labour (through the same mappings as pricing) comes first, then Peak's productivity rates, where the most specific match wins. Anything with neither shows as "no labour rate" and counts toward a visible "missing" total, so a short program is never silently short.
+
+87. **Crew settings are admin settings, not built-in rules.** The defaults (8 h days, 0.5 apprentices per plumber at 50% output, one supervisor per 6 from a crew of 4, PM 10% of field hours) are starting points to change. Apprentices are whole people, never more than the ratio allows.
+
+88. **The program is sequential by stage, in the stage order Peak set.** With a target duration, the crew is the smallest one that gets every stage done in whole days within the target. Builders' programs rarely run that neatly, so any stage's crew or start date can be overridden. The calendar skips weekends, QLD public holidays (Easter computed, Monday substitutes for Christmas and New Year) and the Christmas shutdown.
+
+89. **Material quantities include the waste allowance** and pipe is rounded up to whole stock lengths per material (an admin setting). Fittings come from the fitting rules. With "include items not approved yet" off (the default), only approved quantities count.
+
+90. **Cash flow spreads each stage's sell value evenly over its working days.** That's simple and explainable, good for forecasting progress claims, not a contract claim schedule.
+
+91. **The workforce forecast adds up people per week across won jobs that have a start date** (optionally pending ones too) and compares that with Peak's headcount setting. It's a capacity check, not a roster.
+
+92. **No dual-axis charts.** The cash-flow chart shows monthly value, and the running total is in the table and tooltips instead of on a second axis. Chart colours use a validated colour-blind-safe order, and every chart has a legend and a table next to it.

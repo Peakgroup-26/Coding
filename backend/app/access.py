@@ -5,7 +5,7 @@ Each user has five permissions (admins always have all of them):
   can_civil       civil jobs
   can_all_jobs    other people's jobs, including previous tenders (without it: only jobs they started)
   can_past_rates  the previous civil job rates library
-  can_pricing     changing price books, mappings and fitting rules (anyone can view them)
+  can_pricing     changing price books, mappings, fitting rules and productivity rates (anyone can view them)
 
 `enforce` runs on every API request. It finds the job behind any id in the URL (a job, sheet,
 run, count, BOQ line, document and so on) and refuses the request if the user can't see that
@@ -46,6 +46,7 @@ AREAS = [
     ("/api/catalogue", "can_pricing", {"POST", "PUT", "PATCH", "DELETE"}),
     ("/api/benchmarks", "can_pricing", {"POST", "PUT", "PATCH", "DELETE"}),
     ("/api/settings/simpro-template", "can_pricing", {"POST", "PUT", "PATCH", "DELETE"}),
+    ("/api/productivity", "can_pricing", {"POST", "PUT", "PATCH", "DELETE"}),
 ]
 
 

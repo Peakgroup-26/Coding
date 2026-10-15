@@ -558,3 +558,66 @@ def snapshot_text(db: Session, job: Job, detail: bool = False) -> str:
     if job.spec_materials:
         lines.append("Specified materials: " + ", ".join(f"{k}: {v}" for k, v in job.spec_materials.items()))
     return "\n".join(lines)
+
+
+# --- reports and programs ---
+@tool("report", "Material list, labour hours, or crew & program (people needed, stage dates, duration, manpower by week, "
+      "cash flow) for this job. include_suggested counts items not yet approved.",
+      {"which": {"type": "string", "enum": ["materials", "labour", "program"]}, "include_suggested": {"type": "boolean"}},
+      ["which"])
+def report(ctx: Ctx, which, include_suggested=False):
+    from . import reports
+
+    if which == "materials":
+        return reports.materials(ctx.db, ctx.job, include_suggested, by_stage=False)["rows"][:200], None
+    if which == "labour":
+        lab = reports.labour(ctx.db, ctx.job, include_suggested)
+        return {k: lab[k] for k in ("by_stage", "by_service", "total_hours", "missing")}, None
+    p = reports.program(ctx.db, ctx.job, include_suggested)
+    return {k: p[k] for k in ("mode", "start_date", "finish_date", "working_weeks", "calendar_weeks", "stages", "field_hours",
+                              "supervision_hours", "pm_hours", "pm_hours_per_week", "peak_people", "base_plumbers",
+                              "missing_labour_rates", "cashflow")}, None
+
+
+@tool("set_program", "Set the planned start date, a target duration in weeks (the crew is then worked out), or a fixed number "
+      "of plumbers. Send 0 / empty to leave a value as it is.",
+      {"start_date": {"type": "string", "description": "YYYY-MM-DD, or empty"},
+       "target_weeks": {"type": "number", "description": "0 = leave; -1 = clear the target and use a fixed crew"},
+       "plumbers": {"type": "integer", "description": "0 = leave"}})
+def set_program(ctx: Ctx, start_date="", target_weeks=0, plumbers=0):
+    from datetime import date as _date
+
+    from . import reports
+
+    before = {"start_date": str(ctx.job.start_date), "target_weeks": ctx.job.target_weeks, "program": ctx.job.program}
+    if start_date:
+        try:
+            ctx.job.start_date = _date.fromisoformat(start_date)
+        except ValueError:
+            raise ToolError("start_date must be YYYY-MM-DD")
+    if target_weeks == -1:
+        ctx.job.target_weeks = None
+    elif target_weeks > 0:
+        ctx.job.target_weeks = target_weeks
+    if plumbers > 0:
+        ctx.job.program = {**(ctx.job.program or {}), "plumbers": plumbers}
+        if target_weeks == 0:
+            ctx.job.target_weeks = None
+    record(ctx.db, ctx.user.id, "job", ctx.job.id, "program", before,
+           {"start_date": str(ctx.job.start_date), "target_weeks": ctx.job.target_weeks, "program": ctx.job.program})
+    p = reports.program(ctx.db, ctx.job)
+    return ({k: p[k] for k in ("start_date", "finish_date", "working_weeks", "base_plumbers", "peak_people")},
+            f"Program: start {p['start_date']}, finish {p['finish_date']}, {p['base_plumbers']} plumber(s)")
+
+
+@tool("set_tender_result", "Record whether the tender was won, lost or withdrawn, and the price submitted.",
+      {"result": {"type": "string", "enum": ["pending", "won", "lost", "withdrawn"]},
+       "value": {"type": "number", "description": "Price submitted ex GST; 0 = leave"}}, ["result"])
+def set_tender_result(ctx: Ctx, result, value=0):
+    before = {"tender_result": ctx.job.tender_result, "tender_value": ctx.job.tender_value}
+    ctx.job.tender_result = result
+    if value > 0:
+        ctx.job.tender_value = value
+    record(ctx.db, ctx.user.id, "job", ctx.job.id, "tender_result", before,
+           {"tender_result": result, "tender_value": ctx.job.tender_value})
+    return "Recorded.", f"Tender result: {result}" + (f" (${value:,.0f})" if value else "")

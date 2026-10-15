@@ -5,8 +5,9 @@ import { useApp } from "../App";
 import type { Job, Memory, Permissions, User } from "../types";
 import Admin from "./Admin";
 import { jobStage } from "./Home";
+import ReportingSettings from "./ReportingSettings";
 
-type Tab = "people" | "jobs" | "memory" | "settings";
+type Tab = "people" | "jobs" | "memory" | "reporting" | "settings";
 
 const PERMS: { key: keyof Permissions; label: string; help: string }[] = [
   { key: "can_hydraulic", label: "Plumbing", help: "Plumbing / hydraulic jobs" },
@@ -207,7 +208,7 @@ function MemoryAdmin() {
 
 export default function AdminPortal() {
   const [tab, setTab] = useState<Tab>("people");
-  const tabs: [Tab, string][] = [["people", "People & permissions"], ["jobs", "All jobs"], ["memory", "AI memory"], ["settings", "Lists & settings"]];
+  const tabs: [Tab, string][] = [["people", "People & permissions"], ["jobs", "All jobs"], ["memory", "AI memory"], ["reporting", "Reporting"], ["settings", "Lists & settings"]];
   return (
     <main className="page">
       <h1>Admin portal</h1>
@@ -217,6 +218,7 @@ export default function AdminPortal() {
       {tab === "people" && <People />}
       {tab === "jobs" && <AllJobs />}
       {tab === "memory" && <MemoryAdmin />}
+      {tab === "reporting" && <ReportingSettings />}
       {tab === "settings" && <Admin embedded />}
     </main>
   );

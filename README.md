@@ -36,6 +36,32 @@ Every job has an **Ask the AI** panel down the right-hand side. Tell it what to 
 - **Memory:** when you tell it a preference or correct it ("ABC always draw sewer in brown", "we always use Rehau for acoustic"), it saves a memory for all jobs, that client, or that job. Memories go into every later chat and every automatic read they apply to. Admins can edit, switch off or add memories in the admin portal.
 - **One conversation per job,** shared by everyone working on it. Long conversations are summarised automatically, and *New chat* starts afresh (memories carry over).
 
+## Reports
+
+Each job has a **Reports** page (link at the top of the job), and *Download all reports* gives one Excel workbook with everything:
+
+- **Crew & program.** Set the start date, then either a target duration (the app works out the crew) or a crew size (the app works out how long it takes). You get:
+  - plumbers, apprentices and supervisors needed, and project-management hours
+  - stage-by-stage dates on a working-day calendar (weekends, QLD public holidays and the Christmas shutdown skipped), as a Gantt chart
+  - people on site each week, and the total working days
+
+  Override any stage's crew or start date to match the builder's program.
+- **Labour hours** by stage, by service and line by line, showing where each figure came from (price book or productivity rate). Items with no labour rate are listed rather than guessed.
+- **Material list** to order from: pipe including waste and rounded up to stock lengths, fittings and sundries, and fixtures. It can be split by stage for staged ordering.
+- **Cash flow:** the value earned each month (each stage spread over its working days), for progress claims. This needs a price book on hydraulic jobs.
+
+Labour comes from the price book's prebuild labour hours first, then **productivity rates** (Admin portal → Reporting). Those are Peak's own hours per metre, per item or per civil unit; none are built in, and `docs/productivity-rates-template.csv` shows the layout with example rows that import switched off. The crew settings are admin settings too: hours per day, apprentice ratio and output, people per supervisor, PM %, stock lengths, the shutdown, and your headcount.
+
+The **Reports** page in the top menu covers every job you can see:
+
+- the tender pipeline (pending, won and lost, with values) and your win rate
+- tenders due in the next 14 days
+- a **workforce forecast**: people needed each week across won jobs (optionally pending ones too), against your headcount, with any short weeks flagged
+- how well the AI is doing
+- the most common exclusions
+
+Record each tender's result and submitted price at the top of its job page.
+
 ## Tender documents
 
 Drop the scope of works, specifications, acoustic reports, design briefs, addenda and tender conditions in with the plans (PDF, Word, Excel or text), or add them later from the job page. The app tells documents from drawings by page size: mostly-A4 PDFs are documents. The AI reads each document **before** the drawings, and lists what changes the take-off or the price. Each item quotes the document's own words and page:
@@ -319,6 +345,8 @@ backend/app/
   access.py           permissions, checked on every request
   chat.py, chat_tools.py   the chat panel: conversation handling and the actions the AI can take
   memory.py           the AI's memory
+  reports.py          material lists, labour, crew, programs, cash flow, dashboard
+  reports_export.py   the reports workbook
   revision.py         revision compare
   markup.py           marked-up PDF
   sso.py              Microsoft 365 sign-on

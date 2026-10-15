@@ -67,6 +67,27 @@ function AddPlans({ jobId, disabled, onDone }: { jobId: number; disabled: boolea
   );
 }
 
+function TenderResult({ job, onSaved }: { job: Job; onSaved: () => void }) {
+  const [value, setValue] = useState(job.tender_value ? String(job.tender_value) : "");
+  const save = async (result: string, v = value) => {
+    await api.put(`/api/jobs/${job.id}/tender-result`, { tender_result: result, tender_value: v ? Number(v) : null });
+    onSaved();
+  };
+  return (
+    <div className="row tender-result">
+      <label className="inline small">Tender
+        <select value={job.tender_result ?? "pending"} onChange={(e) => save(e.target.value)}>
+          <option value="pending">Pending</option><option value="won">Won</option><option value="lost">Lost</option><option value="withdrawn">Withdrawn</option>
+        </select>
+      </label>
+      <label className="inline small">Price submitted $
+        <input className="tiny" type="number" min={0} value={value} placeholder="ex GST" onChange={(e) => setValue(e.target.value)}
+               onBlur={() => save(job.tender_result ?? "pending")} />
+      </label>
+    </div>
+  );
+}
+
 export default function JobOverview() {
   const jobId = Number(useParams().jobId);
   const [job, setJob] = useState<Job | null>(null);
@@ -137,6 +158,7 @@ export default function JobOverview() {
       <div className="row wrap">
         <Link to="/">← All jobs</Link>
         <span className="spacer" />
+        <Link to={`/jobs/${jobId}/reports`}>Reports: materials, labour, crew, program →</Link>
         {!civil && <Link to={`/jobs/${jobId}/details`}>Detailed view (sheets, estimate, pricing) →</Link>}
       </div>
       <div className="row wrap title-row">
@@ -144,7 +166,11 @@ export default function JobOverview() {
         <span className={`badge ${civil ? "civil" : "hyd"}`}>{civil ? "Civil BOQ" : "Hydraulic take-off"}</span>
         {job.status === "final" && <span className="badge final">Final</span>}
       </div>
-      {job.client && <p className="muted">{job.client}</p>}
+      <div className="row wrap">
+        {job.client && <span className="muted">{job.client}</span>}
+        <span className="spacer" />
+        <TenderResult job={job} onSaved={load} />
+      </div>
 
       {running && <Progress st={st} />}
       {st.state === "failed" && <div className="card bad-card"><b>The read stopped with an error:</b> {st.error} <button onClick={() => rerun(false)}>Try again</button></div>}
