@@ -2,12 +2,14 @@ import { FormEvent, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
 import { useApp } from "../App";
-import type { Job, Memory, Permissions, User } from "../types";
+import type { Job, Memory, Permissions, Sector, User } from "../types";
 import Admin from "./Admin";
 import { jobStage } from "./Home";
 import ReportingSettings from "./ReportingSettings";
 
 type Tab = "people" | "jobs" | "memory" | "reporting" | "settings";
+
+const SECTORS: [Sector, string][] = [["residential", "Res"], ["commercial", "Com"], ["maintenance", "Maint"]];
 
 const PERMS: { key: keyof Permissions; label: string; help: string }[] = [
   { key: "can_hydraulic", label: "Plumbing", help: "Plumbing / hydraulic jobs" },
@@ -40,7 +42,7 @@ function People() {
       <p className="small muted">Admins always see everything. Untick a box to hide that part of the app from someone; it's enforced on the server, not just hidden.</p>
       <table className="perm-table">
         <thead>
-          <tr><th>Person</th><th>Role</th>{PERMS.map((p) => <th key={p.key} title={p.help}>{p.label}</th>)}<th>Active</th><th></th></tr>
+          <tr><th>Person</th><th>Role</th>{PERMS.map((p) => <th key={p.key} title={p.help}>{p.label}</th>)}<th>Sectors</th><th>Active</th><th></th></tr>
         </thead>
         <tbody>
           {users.map((u) => (
@@ -57,6 +59,19 @@ function People() {
                          onChange={(e) => patch(u, { [p.key]: e.target.checked })} />
                 </td>
               ))}
+              <td className="sectors-cell">
+                {SECTORS.map(([k, l]) => (
+                  <label key={k} className="inline small" title="Untick all three to allow every sector">
+                    <input type="checkbox" disabled={u.role === "admin"} checked={u.role === "admin" || !u.sectors?.length || u.sectors.includes(k)}
+                           onChange={(e) => {
+                             const now = new Set(u.sectors?.length ? u.sectors : SECTORS.map(([x]) => x));
+                             if (e.target.checked) now.add(k); else now.delete(k);
+                             if (now.size === 0) return;  // at least one sector
+                             patch(u, { sectors: [...now] });
+                           }} /> {l}
+                  </label>
+                ))}
+              </td>
               <td className="c"><input type="checkbox" checked={u.active} disabled={u.id === me.id} onChange={(e) => patch(u, { active: e.target.checked })} /></td>
               <td><button className="link" onClick={() => {
                 const pw = window.prompt(`New password for ${u.email} (8+ characters)`);

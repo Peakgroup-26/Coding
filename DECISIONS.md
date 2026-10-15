@@ -221,3 +221,13 @@ These are choices made where the brief left room, as it asks. Each one can be re
 91. **The workforce forecast adds up people per week across won jobs that have a start date** (optionally pending ones too) and compares that with Peak's headcount setting. It's a capacity check, not a roster.
 
 92. **No dual-axis charts.** The cash-flow chart shows monthly value, and the running total is in the table and tooltips instead of on a second axis. Chart colours use a validated colour-blind-safe order, and every chart has a legend and a table next to it.
+
+## Sectors and sales
+
+93. **The sector is a field on every job, not a separate system.** Residential, commercial and maintenance jobs use the same take-off, AI, reports and chat. The sector decides which tab a job is in, its quote-number prefix, who can see it (per-person sector access) and which sales figures it counts in. Jobs that existed before this change are filed as commercial.
+
+94. **A lead is a job with no plans yet,** so nothing has to be copied when the plans arrive. You drop them on the lead.
+
+95. **The pipeline stage is worked out, not stored.** Won, lost or withdrawn comes from the result. Otherwise, a sent date means quote sent; plans, an autopilot run or BOQ lines mean quoting; anything else is a lead. It can't drift from what has actually happened. The dates fill in when the event is recorded and can be corrected. The app refuses a quote dated before its lead, or a result dated before its quote.
+
+96. **Conversion is measured by cohort** (the leads that came in during the period and what became of them), so a period isn't flattered by wins from older leads. The win rate of quotes decided in the period is shown separately. Times are reported as average and median, because one slow job skews the average.

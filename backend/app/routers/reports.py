@@ -82,12 +82,10 @@ class ResultIn(BaseModel):
 
 @router.put("/jobs/{job_id}/tender-result")
 def set_result(job_id: int, body: ResultIn, db: Session = Depends(get_db), user: User = Depends(current_user)):
-    if body.tender_result not in ("pending", "won", "lost", "withdrawn"):
-        raise HTTPException(422, "Result must be pending, won, lost or withdrawn")
+    from .sales import SalesIn, apply_sales
+
     job = get_or_404(db, Job, job_id)
-    before = {"tender_result": job.tender_result, "tender_value": job.tender_value}
-    job.tender_result, job.tender_value = body.tender_result, body.tender_value
-    record(db, user.id, "job", job.id, "tender_result", before, body.model_dump())
+    apply_sales(db, job, SalesIn(tender_result=body.tender_result, tender_value=body.tender_value), user)
     db.commit()
     return {"tender_result": job.tender_result, "tender_value": job.tender_value}
 

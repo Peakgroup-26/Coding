@@ -1,7 +1,14 @@
 export type Pt = [number, number];
 
 export interface Permissions { can_hydraulic: boolean; can_civil: boolean; can_all_jobs: boolean; can_past_rates: boolean; can_pricing: boolean }
-export interface User extends Permissions { id: number; email: string; name: string; role: "estimator" | "reviewer" | "admin"; active: boolean }
+export type Sector = "residential" | "commercial" | "maintenance";
+export type SalesStage = "lead" | "quoting" | "quote_sent" | "won" | "lost" | "withdrawn";
+export const SECTOR_LABELS: Record<Sector, string> = { residential: "Residential", commercial: "Commercial", maintenance: "Maintenance" };
+export const STAGE_LABELS: Record<SalesStage, string> = {
+  lead: "Lead", quoting: "Quoting", quote_sent: "Quote sent", won: "Won", lost: "Lost", withdrawn: "Withdrawn",
+};
+export interface SalesSettings { lead_sources: string[]; sectors: { key: Sector; label: string }[]; counts: Record<Sector, number> }
+export interface User extends Permissions { id: number; email: string; name: string; role: "estimator" | "reviewer" | "admin"; active: boolean; sectors?: Sector[] | null }
 
 export interface ChatAction { tool: string; summary: string }
 export interface ChatMsg { id: number; role: "user" | "assistant" | "note"; text: string; actions: ChatAction[]; user?: string; at?: string }
@@ -22,6 +29,8 @@ export interface Job {
   kind?: "hydraulic" | "civil"; created_at?: string | null; autopilot?: AutopilotStatus | null; created_by?: number | null;
   start_date?: string | null; target_weeks?: number | null; program?: Record<string, unknown> | null;
   tender_result?: "pending" | "won" | "lost" | "withdrawn"; tender_value?: number | null;
+  sector?: Sector; lead_date?: string | null; quote_sent_date?: string | null; decided_date?: string | null;
+  lead_source?: string; contact?: string; sales_stage?: SalesStage;
 }
 
 export interface Attention { kind: string; message: string; sheet_id?: number; sheet?: string }

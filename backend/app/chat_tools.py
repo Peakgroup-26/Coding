@@ -525,8 +525,9 @@ def forget(ctx: Ctx, memory_id):
 
 # --- the job snapshot sent with each message ---
 def snapshot_text(db: Session, job: Job, detail: bool = False) -> str:
-    lines = [f"Job {job.id}: {job.name} ({'civil BOQ' if job.kind == 'civil' else 'hydraulic take-off'}); client: {job.client or '-'}; "
-             f"status: {job.status}"]
+    lines = [f"Job {job.id}: {job.name} ({'civil BOQ' if job.kind == 'civil' else 'hydraulic take-off'}, {job.sector}); "
+             f"quote {job.quote_no or '-'}; client: {job.client or '-'}; status: {job.status}; sales stage: {job.sales_stage}"
+             + (f"; quoted ${job.tender_value:,.0f}" if job.tender_value else "")]
     ap = job.autopilot or {}
     state = ap.get("state", "never")
     lines.append(f"Autopilot: {state}" + (f" ({ap.get('step')})" if state in ("queued", "running") else ""))
@@ -610,14 +611,36 @@ def set_program(ctx: Ctx, start_date="", target_weeks=0, plumbers=0):
             f"Program: start {p['start_date']}, finish {p['finish_date']}, {p['base_plumbers']} plumber(s)")
 
 
-@tool("set_tender_result", "Record whether the tender was won, lost or withdrawn, and the price submitted.",
-      {"result": {"type": "string", "enum": ["pending", "won", "lost", "withdrawn"]},
-       "value": {"type": "number", "description": "Price submitted ex GST; 0 = leave"}}, ["result"])
-def set_tender_result(ctx: Ctx, result, value=0):
-    before = {"tender_result": ctx.job.tender_result, "tender_value": ctx.job.tender_value}
-    ctx.job.tender_result = result
-    if value > 0:
-        ctx.job.tender_value = value
-    record(ctx.db, ctx.user.id, "job", ctx.job.id, "tender_result", before,
-           {"tender_result": result, "tender_value": ctx.job.tender_value})
-    return "Recorded.", f"Tender result: {result}" + (f" (${value:,.0f})" if value else "")
+@tool("update_sales", "Sales tracking for this job: mark the quote as sent, record won / lost / withdrawn, the price "
+      "quoted, the sector, the lead source or contact. Dates fill in as today unless given.",
+      {"result": {"type": "string", "enum": ["", "pending", "won", "lost", "withdrawn"]},
+       "value": {"type": "number", "description": "Price quoted ex GST; 0 = leave"},
+       "mark_quote_sent": {"type": "boolean"},
+       "quote_sent_date": {"type": "string", "description": "YYYY-MM-DD, or empty"},
+       "decided_date": {"type": "string", "description": "YYYY-MM-DD, or empty"},
+       "sector": {"type": "string", "enum": ["", "residential", "commercial", "maintenance"]},
+       "lead_source": {"type": "string", "description": "empty = leave"}, "contact": {"type": "string", "description": "empty = leave"}})
+def update_sales(ctx: Ctx, result="", value=0, mark_quote_sent=False, quote_sent_date="", decided_date="", sector="", lead_source="", contact=""):
+    from datetime import date as _date
+
+    from fastapi import HTTPException
+
+    from .routers.sales import SalesIn, apply_sales
+
+    try:
+        body = SalesIn(tender_result=result or None, tender_value=value or None, mark_quote_sent=mark_quote_sent,
+                       quote_sent_date=_date.fromisoformat(quote_sent_date) if quote_sent_date else None,
+                       decided_date=_date.fromisoformat(decided_date) if decided_date else None,
+                       sector=sector or None, lead_source=lead_source or None, contact=contact or None)
+        if not value:
+            body = body.model_copy(update={"tender_value": ctx.job.tender_value})
+        apply_sales(ctx.db, ctx.job, body, ctx.user)
+    except ValueError:
+        raise ToolError("Dates must be YYYY-MM-DD")
+    except HTTPException as e:
+        raise ToolError(str(e.detail))
+    j = ctx.job
+    bits = [x for x in (result and f"result {result}", mark_quote_sent and "quote marked sent", value and f"${value:,.0f}",
+                        sector and f"sector {sector}") if x]
+    return ({"stage": j.sales_stage, "quote_sent_date": str(j.quote_sent_date), "decided_date": str(j.decided_date),
+             "result": j.tender_result, "value": j.tender_value}, "Sales: " + (", ".join(bits) or "updated"))

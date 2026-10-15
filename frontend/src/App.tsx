@@ -12,6 +12,7 @@ import SheetViewer from "./pages/SheetViewer";
 import AdminPortal from "./pages/AdminPortal";
 import Account from "./pages/Account";
 import Dashboard from "./pages/Dashboard";
+import Sales from "./pages/Sales";
 import JobReports from "./pages/JobReports";
 import Rules from "./pages/Rules";
 import PriceBooks from "./pages/PriceBooks";
@@ -67,6 +68,7 @@ export default function App() {
             <Link to="/">Home</Link>
             {can(user, "can_past_rates") && can(user, "can_civil") && <Link to="/civil-rates">Civil rates</Link>}
             {can(user, "can_hydraulic") && <Link to="/price-books">Price books</Link>}
+            <Link to="/sales">Sales</Link>
             <Link to="/reports">Reports</Link>
             {user.role === "admin" && <Link to="/admin">Admin portal</Link>}
             <details className="more">
@@ -90,6 +92,7 @@ export default function App() {
           <Route path="/jobs/:jobId/details" element={<JobPage />} />
           <Route path="/jobs/:jobId/reports" element={<JobReports />} />
           <Route path="/reports" element={<Dashboard />} />
+          <Route path="/sales" element={<Sales />} />
           <Route path="/civil-rates" element={<CivilRates />} />
           <Route path="/sheets/:sheetId" element={<SheetViewer />} />
           <Route path="/rules" element={<Rules />} />

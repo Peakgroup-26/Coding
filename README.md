@@ -36,6 +36,39 @@ Every job has an **Ask the AI** panel down the right-hand side. Tell it what to 
 - **Memory:** when you tell it a preference or correct it ("ABC always draw sewer in brown", "we always use Rehau for acoustic"), it saves a memory for all jobs, that client, or that job. Memories go into every later chat and every automatic read they apply to. Admins can edit, switch off or add memories in the admin portal.
 - **One conversation per job,** shared by everyone working on it. Long conversations are summarised automatically, and *New chat* starts afresh (memories carry over).
 
+## Residential, commercial and maintenance
+
+The home page has a tab for each sector. Plans dropped in a tab, and leads added there, belong to that sector:
+
+- Each sector has its own job list, its own quote numbers (`RES-2026-0001`, `COM-…`, `MNT-…`) and its own sales figures.
+- An admin can limit people to certain sectors (Admin portal → People & permissions).
+
+**Leads:** *+ New lead* records an enquiry before any plans arrive: client, contact, where it came from, when the quote is due and a rough value. Drop the plans on it later and it carries on as a normal job.
+
+**Pipeline:** each job shows where it is: **Lead → Quoting → Quote sent → Won / Lost**.
+
+- *Mark quote sent*, *Won it* and *Lost* record the dates as they happen, and every date can be corrected.
+- Quoting happens by itself when plans arrive.
+
+## Sales dashboard
+
+**Sales** in the top menu, for all sectors or one, over the last 3, 6, 12 or 24 months:
+
+- **Leads, conversion rates and value:**
+  - leads, and the % quoted
+  - % of quotes won, and % of leads won overall
+  - value quoted and won
+- **Time to convert:** average and middle days from lead to quote returned, quote to won, lead to won in total, and quote to lost.
+- **Lists:**
+  - the pipeline right now, with values
+  - quotes waiting on an answer, oldest first (more than two weeks is highlighted for follow-up)
+  - leads still to quote, with due dates and anything overdue
+- **Breakdowns:**
+  - month by month: leads, quotes sent, won, lost and won value
+  - by sector, by lead source and by estimator: quote rate, win rate, value and days to quote
+
+Conversion is counted by cohort: of the leads that came in during the period, how many were quoted and how many won. The win rate of quotes decided in the period is shown alongside. Admins can edit the list of lead sources (Admin portal → Reporting).
+
 ## Reports
 
 Each job has a **Reports** page (link at the top of the job), and *Download all reports* gives one Excel workbook with everything:
@@ -347,6 +380,7 @@ backend/app/
   memory.py           the AI's memory
   reports.py          material lists, labour, crew, programs, cash flow, dashboard
   reports_export.py   the reports workbook
+  sales.py            sectors, the lead-to-job pipeline, the sales dashboard
   revision.py         revision compare
   markup.py           marked-up PDF
   sso.py              Microsoft 365 sign-on

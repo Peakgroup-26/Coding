@@ -66,6 +66,7 @@ export default function ReportingSettings() {
 
   return (
     <>
+      <LeadSources />
       {error && <p className="error">{error}</p>}
       {msg && <p className="ok">{msg}</p>}
       <div className="admin-grid">
@@ -164,5 +165,24 @@ export default function ReportingSettings() {
         </section>
       </div>
     </>
+  );
+}
+
+function LeadSources() {
+  const [text, setText] = useState("");
+  const [saved, setSaved] = useState("");
+  useEffect(() => { api.get<{ lead_sources: string[] }>("/api/sales/settings").then((s) => setText(s.lead_sources.join("\n"))); }, []);
+  const save = async () => {
+    const r = await api.put<{ lead_sources: string[] }>("/api/sales/settings", { lead_sources: text.split("\n") });
+    setText(r.lead_sources.join("\n"));
+    setSaved("Saved.");
+  };
+  return (
+    <section className="card narrow">
+      <h2>Lead sources</h2>
+      <p className="small muted">The choices offered for "where did this lead come from?" (one per line). People can still type their own.</p>
+      <textarea rows={6} style={{ width: "100%" }} value={text} onChange={(e) => { setText(e.target.value); setSaved(""); }} />
+      <div className="row"><button onClick={save}>Save lead sources</button>{saved && <span className="ok small">{saved}</span>}</div>
+    </section>
   );
 }

@@ -6,7 +6,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .. import config, storage
-from ..access import can_kind, can_see_job
+from ..access import can_kind, can_sector, can_see_job
+from ..sales import prepare_new
 from ..audit import record, snapshot
 from ..auth import current_user
 from ..db import get_db
@@ -21,17 +22,20 @@ router = APIRouter(prefix="/api", tags=["jobs"])
 
 
 @router.get("/jobs", response_model=list[JobOut])
-def list_jobs(kind: str = "", db: Session = Depends(get_db), user: User = Depends(current_user)):
-    """The jobs this user may see, newest first. kind=hydraulic or civil narrows it."""
+def list_jobs(kind: str = "", sector: str = "", db: Session = Depends(get_db), user: User = Depends(current_user)):
+    """The jobs this user may see, newest first. kind (hydraulic / civil) and sector narrow it."""
     jobs = [j for j in db.scalars(select(Job).order_by(Job.id.desc())) if can_see_job(user, j)]
-    return [j for j in jobs if not kind or (j.kind or "hydraulic") == kind]
+    return [j for j in jobs if (not kind or (j.kind or "hydraulic") == kind) and (not sector or j.sector == sector)]
 
 
 @router.post("/jobs", response_model=JobOut)
 def create_job(body: JobIn, db: Session = Depends(get_db), user: User = Depends(current_user)):
     if not can_kind(user, body.kind):
         raise HTTPException(403, f"You don't have access to {body.kind} jobs")
+    if not can_sector(user, body.sector):
+        raise HTTPException(403, f"You don't have access to {body.sector} jobs")
     job = Job(**body.model_dump(), created_by=user.id)
+    prepare_new(db, job)
     db.add(job)
     db.flush()
     record(db, user.id, "job", job.id, "create", after=snapshot(job))

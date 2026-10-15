@@ -58,10 +58,15 @@ def can_kind(user: User, kind: str) -> bool:
     return has(user, "can_civil" if kind == "civil" else "can_hydraulic")
 
 
+def can_sector(user: User, sector: str) -> bool:
+    """Residential / commercial / maintenance. No list set = every sector."""
+    return user.role == "admin" or not user.sectors or sector in user.sectors
+
+
 def can_see_job(user: User, job: Job) -> bool:
     if user.role == "admin":
         return True
-    if not can_kind(user, job.kind or "hydraulic"):
+    if not can_kind(user, job.kind or "hydraulic") or not can_sector(user, job.sector or "commercial"):
         return False
     return job.created_by == user.id or bool(user.can_all_jobs)
 

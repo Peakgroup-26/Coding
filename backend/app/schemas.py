@@ -27,6 +27,7 @@ class UserOut(ORM):
     can_all_jobs: bool = True
     can_past_rates: bool = True
     can_pricing: bool = True
+    sectors: list[str] | None = None
 
 
 class UserIn(BaseModel):
@@ -39,6 +40,7 @@ class UserIn(BaseModel):
     can_all_jobs: bool = True
     can_past_rates: bool = True
     can_pricing: bool = True
+    sectors: list[str] | None = None
 
 
 class UserPatch(BaseModel):
@@ -51,6 +53,7 @@ class UserPatch(BaseModel):
     can_all_jobs: bool | None = None
     can_past_rates: bool | None = None
     can_pricing: bool | None = None
+    sectors: list[str] | None = None
 
 
 class PasswordChange(BaseModel):
@@ -117,6 +120,10 @@ class JobIn(BaseModel):
     due_date: date | None = None
     status: str = "draft"
     kind: Literal["hydraulic", "civil"] = "hydraulic"
+    sector: Literal["residential", "commercial", "maintenance"] = "commercial"
+    lead_source: str = ""
+    contact: str = ""
+    lead_date: date | None = None
 
 
 class JobPatch(BaseModel):
@@ -149,6 +156,13 @@ class JobOut(ORM, JobIn):
     program: dict | None = None
     tender_result: str = "pending"
     tender_value: float | None = None
+    sector: str = "commercial"
+    lead_date: date | None = None
+    quote_sent_date: date | None = None
+    decided_date: date | None = None
+    lead_source: str = ""
+    contact: str = ""
+    sales_stage: str = "lead"
 
 
 class FileOut(ORM):

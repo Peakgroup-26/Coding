@@ -7,7 +7,8 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from .. import autopilot
-from ..access import can_kind
+from ..access import can_kind, can_sector
+from ..sales import SECTORS, prepare_new
 from ..audit import record, snapshot
 from ..auth import current_user
 from ..checks import run_checks
@@ -32,6 +33,8 @@ async def quick_start(
     kind: str = Form("hydraulic"),
     name: str = Form(""),
     client: str = Form(""),
+    sector: str = Form("commercial"),
+
     db: Session = Depends(get_db),
     user: User = Depends(current_user),
 ):
@@ -40,7 +43,12 @@ async def quick_start(
         raise HTTPException(422, "kind must be hydraulic or civil")
     if not can_kind(user, kind):
         raise HTTPException(403, f"You don't have access to {'civil' if kind == 'civil' else 'plumbing'} jobs")
-    job = Job(name=name.strip() or _job_name(files), client=client.strip(), kind=kind, created_by=user.id)
+    if sector not in SECTORS:
+        raise HTTPException(422, "sector must be residential, commercial or maintenance")
+    if not can_sector(user, sector):
+        raise HTTPException(403, f"You don't have access to {sector} jobs")
+    job = Job(name=name.strip() or _job_name(files), client=client.strip(), kind=kind, sector=sector, created_by=user.id)
+    prepare_new(db, job)
     db.add(job)
     db.flush()
     # Plans and tender documents can be dropped together; each file is sorted into one or the other.

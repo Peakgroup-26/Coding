@@ -5,6 +5,7 @@ import type { AutopilotStatus, Job, Sheet } from "../types";
 import CivilBoqView from "./CivilBoq";
 import TenderDocs from "./TenderDocs";
 import ChatPanel from "./ChatPanel";
+import SalesPanel from "./SalesPanel";
 
 const fmt = (n: number | undefined, dp = 0) => (n ?? 0).toLocaleString("en-AU", { maximumFractionDigits: dp, minimumFractionDigits: dp });
 
@@ -63,27 +64,6 @@ function AddPlans({ jobId, disabled, onDone }: { jobId: number; disabled: boolea
       </button>
       <input ref={input} type="file" accept=".pdf,application/pdf" multiple hidden onChange={(e) => send(e.target.files)} />
       {error && <span className="error small"> {error}</span>}
-    </div>
-  );
-}
-
-function TenderResult({ job, onSaved }: { job: Job; onSaved: () => void }) {
-  const [value, setValue] = useState(job.tender_value ? String(job.tender_value) : "");
-  const save = async (result: string, v = value) => {
-    await api.put(`/api/jobs/${job.id}/tender-result`, { tender_result: result, tender_value: v ? Number(v) : null });
-    onSaved();
-  };
-  return (
-    <div className="row tender-result">
-      <label className="inline small">Tender
-        <select value={job.tender_result ?? "pending"} onChange={(e) => save(e.target.value)}>
-          <option value="pending">Pending</option><option value="won">Won</option><option value="lost">Lost</option><option value="withdrawn">Withdrawn</option>
-        </select>
-      </label>
-      <label className="inline small">Price submitted $
-        <input className="tiny" type="number" min={0} value={value} placeholder="ex GST" onChange={(e) => setValue(e.target.value)}
-               onBlur={() => save(job.tender_result ?? "pending")} />
-      </label>
     </div>
   );
 }
@@ -166,16 +146,19 @@ export default function JobOverview() {
         <span className={`badge ${civil ? "civil" : "hyd"}`}>{civil ? "Civil BOQ" : "Hydraulic take-off"}</span>
         {job.status === "final" && <span className="badge final">Final</span>}
       </div>
-      <div className="row wrap">
-        {job.client && <span className="muted">{job.client}</span>}
-        <span className="spacer" />
-        <TenderResult job={job} onSaved={load} />
-      </div>
+      {job.client && <p className="muted">{job.client}</p>}
+      <SalesPanel job={job} onSaved={load} />
 
       {running && <Progress st={st} />}
       {st.state === "failed" && <div className="card bad-card"><b>The read stopped with an error:</b> {st.error} <button onClick={() => rerun(false)}>Try again</button></div>}
       {st.state === "interrupted" && <div className="card warn-card">The read was interrupted by a server restart. <button onClick={() => rerun(false)}>Carry on</button></div>}
-      {st.state === "never" && !civil && (
+      {st.state === "never" && job.sales_stage === "lead" && (
+        <div className="card lead-waiting">
+          <b>Waiting for plans.</b> When they arrive, add them here (with any scope or specs) and the app reads them.
+          <div style={{ marginTop: 8 }}><AddPlans jobId={jobId} disabled={job.status === "final"} onDone={poll} /></div>
+        </div>
+      )}
+      {st.state === "never" && job.sales_stage !== "lead" && !civil && (
         <div className="card">This job was set up by hand. <button onClick={() => rerun(false)}>Read the plans automatically</button></div>
       )}
       {error && <p className="error big">{error}</p>}

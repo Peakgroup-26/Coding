@@ -29,6 +29,7 @@ class User(Base):
     can_all_jobs: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())  # other people's and previous tenders
     can_past_rates: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())  # previous civil job rates
     can_pricing: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())  # price books, mappings, rules
+    sectors: Mapped[list | None] = mapped_column(JSON, nullable=True)  # residential / commercial / maintenance; empty = all
 
 
 class Stage(Base):
@@ -105,12 +106,28 @@ class Job(Base):
     program: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # crew and per-stage overrides
     tender_result: Mapped[str] = mapped_column(String(20), default="pending", server_default="pending")  # pending | won | lost | withdrawn
     tender_value: Mapped[float | None] = mapped_column(Float, nullable=True)  # price submitted, ex GST
+    # Sales tracking (sales.py)
+    sector: Mapped[str] = mapped_column(String(20), default="commercial", server_default="commercial")  # residential | commercial | maintenance
+    lead_date: Mapped[date | None] = mapped_column(Date, nullable=True)  # enquiry received
+    quote_sent_date: Mapped[date | None] = mapped_column(Date, nullable=True)  # quote returned to the client
+    decided_date: Mapped[date | None] = mapped_column(Date, nullable=True)  # won / lost / withdrawn
+    lead_source: Mapped[str] = mapped_column(String(100), default="", server_default="")
+    contact: Mapped[str] = mapped_column(String(300), default="", server_default="")  # name, phone, email
     # Progress of the automatic read: {state, step, done, total, started_at, finished_at, attention: [...], summary}
     autopilot: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     # Set by accepted tender requirements (tender.py):
     excluded_services: Mapped[list | None] = mapped_column(JSON, nullable=True)  # ["FIRE"]: by others
     spec_materials: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # {"SAN": "Acoustic PVC"}
     rate_adjustments: Mapped[list | None] = mapped_column(JSON, nullable=True)  # [{requirement_id, label, percent, applies_to, ...}]
+
+    @property
+    def sales_stage(self) -> str:
+        """lead | quoting | quote_sent | won | lost | withdrawn (see sales.py)."""
+        from sqlalchemy.orm import object_session
+
+        from .sales import stage
+
+        return stage(object_session(self), self)
 
     files: Mapped[list["DrawingFile"]] = relationship(back_populates="job", cascade="all, delete-orphan")
     levels: Mapped[list["Level"]] = relationship(back_populates="job", cascade="all, delete-orphan")
