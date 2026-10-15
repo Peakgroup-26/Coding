@@ -162,6 +162,9 @@ class JobOut(ORM, JobIn):
     decided_date: date | None = None
     lead_source: str = ""
     contact: str = ""
+    work_type: str = ""
+    value_band: str = ""
+    outcome_reason: str = ""
     sales_stage: str = "lead"
 
 

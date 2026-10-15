@@ -113,6 +113,9 @@ class Job(Base):
     decided_date: Mapped[date | None] = mapped_column(Date, nullable=True)  # won / lost / withdrawn
     lead_source: Mapped[str] = mapped_column(String(100), default="", server_default="")
     contact: Mapped[str] = mapped_column(String(300), default="", server_default="")  # name, phone, email
+    work_type: Mapped[str] = mapped_column(String(100), default="", server_default="")  # picked from the sector's list
+    value_band: Mapped[str] = mapped_column(String(40), default="", server_default="")  # rough size of the job, e.g. "10k-50k"
+    outcome_reason: Mapped[str] = mapped_column(String(100), default="", server_default="")  # why it was lost / withdrawn
     # Progress of the automatic read: {state, step, done, total, started_at, finished_at, attention: [...], summary}
     autopilot: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     # Set by accepted tender requirements (tender.py):

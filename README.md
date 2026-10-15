@@ -43,11 +43,18 @@ The home page has a tab for each sector. Plans dropped in a tab, and leads added
 - Each sector has its own job list, its own quote numbers (`RES-2026-0001`, `COM-…`, `MNT-…`) and its own sales figures.
 - An admin can limit people to certain sectors (Admin portal → People & permissions).
 
-**Leads:** *+ New lead* records an enquiry before any plans arrive: client, contact, where it came from, when the quote is due and a rough value. Drop the plans on it later and it carries on as a normal job.
+**Leads:** *+ New lead* records an enquiry before any plans arrive. Almost everything is tapped, not typed:
+
+- sector, plumbing or civil, type of work (each sector has its own list), where it came from, rough size and when the quote is due are buttons
+- client and contact are drop-downs of the ones already used, with *+ New…* for someone new
+- the job name fills itself in (e.g. "Hot water – ABC Strata") unless you type one
+
+Drop the plans on it later and it carries on as a normal job.
 
 **Pipeline:** each job shows where it is: **Lead → Quoting → Quote sent → Won / Lost**.
 
-- *Mark quote sent*, *Won it* and *Lost* record the dates as they happen, and every date can be corrected.
+- *Mark quote sent* asks when it went out (Today / Yesterday / pick) and the price. *Lost* and *Withdrawn* ask why, with a tap list of reasons. The dates are recorded as they happen and every date can be corrected.
+- An admin edits the tap lists (lead sources, lost reasons, types of work per sector) in Admin portal → Reporting.
 - Quoting happens by itself when plans arrive.
 
 ## Sales dashboard
@@ -65,9 +72,10 @@ The home page has a tab for each sector. Plans dropped in a tab, and leads added
   - leads still to quote, with due dates and anything overdue
 - **Breakdowns:**
   - month by month: leads, quotes sent, won, lost and won value
-  - by sector, by lead source and by estimator: quote rate, win rate, value and days to quote
+  - by sector, type of work, job size, client, lead source and estimator: quote rate, win rate, value and days to quote
+  - why jobs are lost: count, share and value for each reason
 
-Conversion is counted by cohort: of the leads that came in during the period, how many were quoted and how many won. The win rate of quotes decided in the period is shown alongside. Admins can edit the list of lead sources (Admin portal → Reporting).
+Conversion is counted by cohort: of the leads that came in during the period, how many were quoted and how many won. The win rate of quotes decided in the period is shown alongside. Admins can edit the pick lists (Admin portal → Reporting).
 
 ## Reports
 

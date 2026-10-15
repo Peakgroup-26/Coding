@@ -17,7 +17,8 @@ interface Dash {
   days: { lead_to_quote: Stats; quote_to_win: Stats; lead_to_win: Stats; quote_to_loss: Stats };
   value: { quoted: number; won: number; average_won: number | null; open_quotes: number };
   pipeline: Record<SalesStage, { count: number; value: number }>;
-  by_source: Group[]; by_estimator: Group[]; by_sector: Group[];
+  by_source: Group[]; by_estimator: Group[]; by_sector: Group[]; by_work_type: Group[]; by_size: Group[]; by_client: Group[];
+  lost_reasons: { reason: string; count: number; value: number; pct: number | null }[];
   monthly: { month: string; leads: number; quotes_sent: number; won: number; lost: number; won_value: number }[];
   open_quotes: Brief[]; to_quote: Brief[];
 }
@@ -62,7 +63,7 @@ function GroupTable({ title, rows }: { title: string; rows: Group[] }) {
     <section className="card">
       <h2>{title}</h2>
       <table className="num">
-        <thead><tr><th>{title.replace("By ", "")}</th><th>Leads</th><th>Quoted</th><th>Quote rate</th><th>Won</th><th>Win rate</th><th>Won value</th><th>Days to quote</th></tr></thead>
+        <thead><tr><th>{title.replace("By ", "").replace(" (top 15)", "").replace(/^./, (c) => c.toUpperCase())}</th><th>Leads</th><th>Quoted</th><th>Quote rate</th><th>Won</th><th>Win rate</th><th>Won value</th><th>Days to quote</th></tr></thead>
         <tbody>
           {rows.map((r) => (
             <tr key={r.name}><td>{r.name}</td><td>{r.leads}</td><td>{r.quoted}</td><td>{pct(r.quote_rate_pct)}</td><td>{r.won}</td>
@@ -195,7 +196,27 @@ export default function Sales() {
         </table>
       </section>
 
+      {d.lost_reasons.length > 0 && (
+        <section className="card">
+          <h2>Why we lose jobs</h2>
+          <table className="num">
+            <thead><tr><th>Reason</th><th>Jobs</th><th></th><th>Share</th><th>Value lost</th></tr></thead>
+            <tbody>
+              {d.lost_reasons.map((r) => (
+                <tr key={r.reason}><td>{r.reason}</td><td>{r.count}</td>
+                  <td style={{ width: 160 }}><MiniBar value={r.count} max={d.lost_reasons[0].count} /></td>
+                  <td>{pct(r.pct)}</td><td>{money(r.value)}</td></tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="small muted">Jobs lost or withdrawn in this period, by the reason picked when they were marked.</p>
+        </section>
+      )}
+
       {sector === "" && <GroupTable title="By sector" rows={d.by_sector} />}
+      <GroupTable title="By type of work" rows={d.by_work_type} />
+      <GroupTable title="By job size" rows={d.by_size} />
+      <GroupTable title="By client (top 15)" rows={d.by_client} />
       <GroupTable title="By lead source" rows={d.by_source} />
       <GroupTable title="By estimator" rows={d.by_estimator} />
     </main>

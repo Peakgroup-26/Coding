@@ -23,6 +23,19 @@ SECTORS = {"residential": ("Residential", "RES"), "commercial": ("Commercial", "
 STAGES = ["lead", "quoting", "quote_sent", "won", "lost", "withdrawn"]
 STAGE_LABELS = {"lead": "Lead", "quoting": "Quoting", "quote_sent": "Quote sent", "won": "Won", "lost": "Lost", "withdrawn": "Withdrawn"}
 DEFAULT_SOURCES = ["Builder (repeat)", "Builder (new)", "Website", "Referral", "Tender portal", "Phone / walk-in", "Real estate / strata", "Other"]
+DEFAULT_WORK_TYPES = {
+    "residential": ["New house", "Duplex / townhouses", "Renovation / extension", "Bathroom / kitchen", "Pool / landscaping", "Other"],
+    "commercial": ["Apartments / units", "Retail / shopping centre", "Office", "Childcare / school", "Medical / aged care",
+                   "Industrial / warehouse", "Hospitality", "Fit-out", "Other"],
+    "maintenance": ["Blocked drain", "Leak / burst pipe", "Hot water", "Gas", "Fixtures / tapware", "Backflow / testing",
+                    "Roof / stormwater", "Scheduled service", "Other"],
+}
+DEFAULT_LOST_REASONS = ["Price too high", "Went with another plumber", "Builder lost the job", "Project didn't go ahead",
+                        "Timing / couldn't start in time", "No response", "Scope or spec mismatch", "Other"]
+# Rough job size: (key, label). Picked when the lead comes in; the real price goes in when the quote is sent.
+VALUE_BANDS = [("<5k", "Under $5k"), ("5k-20k", "$5k – $20k"), ("20k-50k", "$20k – $50k"), ("50k-150k", "$50k – $150k"),
+               ("150k-500k", "$150k – $500k"), ("500k-1m", "$500k – $1M"), ("1m+", "Over $1M"), ("unknown", "Not sure")]
+BAND_LABELS = dict(VALUE_BANDS)
 
 
 def stage(db: Session, job: Job) -> str:
@@ -57,9 +70,37 @@ def prepare_new(db: Session, job: Job) -> None:
         job.quote_no = next_quote_no(db, job.sector)
 
 
-def sources(db: Session) -> list[str]:
+def _stored(db: Session) -> dict:
     s = db.get(AppSetting, "sales")
-    return list((s.value or {}).get("lead_sources") or DEFAULT_SOURCES) if s else list(DEFAULT_SOURCES)
+    return (s.value or {}) if s else {}
+
+
+def sources(db: Session) -> list[str]:
+    return list(_stored(db).get("lead_sources") or DEFAULT_SOURCES)
+
+
+def lost_reasons(db: Session) -> list[str]:
+    return list(_stored(db).get("lost_reasons") or DEFAULT_LOST_REASONS)
+
+
+def work_types(db: Session) -> dict[str, list[str]]:
+    saved = _stored(db).get("work_types") or {}
+    return {k: list(saved.get(k) or v) for k, v in DEFAULT_WORK_TYPES.items()}
+
+
+def clients(jobs: list[Job]) -> list[dict]:
+    """Clients already on jobs, busiest first, each with the contacts used for them: the drop-down for a new lead."""
+    by: dict[str, dict] = {}
+    for j in jobs:
+        name = (j.client or "").strip()
+        if not name:
+            continue
+        c = by.setdefault(name.lower(), {"name": name, "jobs": 0, "contacts": [], "sectors": set()})
+        c["jobs"] += 1
+        c["sectors"].add(j.sector)
+        if j.contact and j.contact not in c["contacts"]:
+            c["contacts"].append(j.contact)
+    return [{**c, "sectors": sorted(c["sectors"])} for c in sorted(by.values(), key=lambda c: (-c["jobs"], c["name"].lower()))]
 
 
 def _days(a: date | None, b: date | None) -> int | None:
@@ -169,10 +210,23 @@ def dashboard(db: Session, jobs: list[Job], months: int = 12, today: date | None
         "by_source": group(lambda j: j.lead_source),
         "by_estimator": group(lambda j: names.get(j.created_by, "")),
         "by_sector": group(lambda j: SECTORS.get(j.sector, ("",))[0]),
+        "by_work_type": group(lambda j: j.work_type),
+        "by_size": sorted(group(lambda j: BAND_LABELS.get(j.value_band, "")),
+                          key=lambda g: [lbl for _, lbl in VALUE_BANDS].index(g["name"]) if g["name"] in BAND_LABELS.values() else 99),
+        "by_client": group(lambda j: (j.client or "").strip())[:15],
+        "lost_reasons": _reasons([j for j in jobs if j.tender_result in ("lost", "withdrawn") and j.decided_date and j.decided_date >= start]),
         "monthly": list(months_out.values()),
         "open_quotes": open_quotes[:50],
         "to_quote": to_quote[:50],
     }
+
+
+def _reasons(lost: list[Job]) -> list[dict]:
+    counts: dict[str, list[Job]] = defaultdict(list)
+    for j in lost:
+        counts[j.outcome_reason or "(not given)"].append(j)
+    return sorted(({"reason": k, "count": len(v), "value": round(sum(j.tender_value or 0 for j in v), 2),
+                    "pct": _pct(len(v), len(lost))} for k, v in counts.items()), key=lambda x: -x["count"])
 
 
 def count_by_sector(db: Session, jobs: list[Job]) -> dict:

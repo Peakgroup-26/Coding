@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { api, download, upload } from "../api";
 import { useApp } from "../App";
+import type { Sector } from "../types";
+import { SECTOR_LABELS } from "../types";
 
 interface Rate {
   id?: number; kind: string; service_code: string; dn_min: number | null; dn_max: number | null; material: string; item_type: string;
@@ -168,21 +170,43 @@ export default function ReportingSettings() {
   );
 }
 
-function LeadSources() {
-  const [text, setText] = useState("");
+type Lists = { lead_sources: string[]; lost_reasons: string[]; work_types: Record<Sector, string[]> };
+
+function ListBox({ title, help, items, onSave }: { title: string; help: string; items: string[]; onSave: (v: string[]) => Promise<void> }) {
+  const [text, setText] = useState(items.join("\n"));
   const [saved, setSaved] = useState("");
-  useEffect(() => { api.get<{ lead_sources: string[] }>("/api/sales/settings").then((s) => setText(s.lead_sources.join("\n"))); }, []);
-  const save = async () => {
-    const r = await api.put<{ lead_sources: string[] }>("/api/sales/settings", { lead_sources: text.split("\n") });
-    setText(r.lead_sources.join("\n"));
-    setSaved("Saved.");
-  };
+  useEffect(() => setText(items.join("\n")), [items]);
   return (
-    <section className="card narrow">
-      <h2>Lead sources</h2>
-      <p className="small muted">The choices offered for "where did this lead come from?" (one per line). People can still type their own.</p>
-      <textarea rows={6} style={{ width: "100%" }} value={text} onChange={(e) => { setText(e.target.value); setSaved(""); }} />
-      <div className="row"><button onClick={save}>Save lead sources</button>{saved && <span className="ok small">{saved}</span>}</div>
+    <div>
+      <h3>{title}</h3>
+      <p className="small muted">{help}</p>
+      <textarea rows={8} style={{ width: "100%" }} value={text} onChange={(e) => { setText(e.target.value); setSaved(""); }} />
+      <div className="row"><button onClick={async () => { await onSave(text.split("\n")); setSaved("Saved."); }}>Save</button>
+        {saved && <span className="ok small">{saved}</span>}</div>
+    </div>
+  );
+}
+
+/** The choices offered in the sales drop-downs and tap lists. */
+function LeadSources() {
+  const [lists, setLists] = useState<Lists | null>(null);
+  useEffect(() => { api.get<Lists>("/api/sales/settings").then(setLists); }, []);
+  if (!lists) return null;
+  const save = async (body: Partial<Lists>) => setLists(await api.put<Lists>("/api/sales/settings", body));
+  return (
+    <section className="card">
+      <h2>Sales pick lists</h2>
+      <p className="small muted">The answers people tap when adding a lead or marking a quote lost. One per line, in the order you want them shown.
+        Changing a list doesn't change jobs already recorded.</p>
+      <div className="list-grid">
+        <ListBox title="Where leads come from" help="Lead source." items={lists.lead_sources} onSave={(v) => save({ lead_sources: v })} />
+        <ListBox title="Why jobs are lost" help="Asked when a quote is marked lost or withdrawn." items={lists.lost_reasons}
+                 onSave={(v) => save({ lost_reasons: v })} />
+        {(Object.keys(SECTOR_LABELS) as Sector[]).map((k) => (
+          <ListBox key={k} title={`Type of work: ${SECTOR_LABELS[k]}`} help={`Offered for ${SECTOR_LABELS[k].toLowerCase()} leads.`}
+                   items={lists.work_types[k] ?? []} onSave={(v) => save({ work_types: { ...lists.work_types, [k]: v } })} />
+        ))}
+      </div>
     </section>
   );
 }

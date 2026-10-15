@@ -7,7 +7,11 @@ export const SECTOR_LABELS: Record<Sector, string> = { residential: "Residential
 export const STAGE_LABELS: Record<SalesStage, string> = {
   lead: "Lead", quoting: "Quoting", quote_sent: "Quote sent", won: "Won", lost: "Lost", withdrawn: "Withdrawn",
 };
-export interface SalesSettings { lead_sources: string[]; sectors: { key: Sector; label: string }[]; counts: Record<Sector, number> }
+export interface SalesSettings {
+  lead_sources: string[]; lost_reasons: string[]; work_types: Record<Sector, string[]>; value_bands: { key: string; label: string }[];
+  sectors: { key: Sector; label: string }[]; counts: Record<Sector, number>;
+}
+export interface ClientChoice { name: string; jobs: number; contacts: string[]; sectors: Sector[] }
 export interface User extends Permissions { id: number; email: string; name: string; role: "estimator" | "reviewer" | "admin"; active: boolean; sectors?: Sector[] | null }
 
 export interface ChatAction { tool: string; summary: string }
@@ -31,6 +35,7 @@ export interface Job {
   tender_result?: "pending" | "won" | "lost" | "withdrawn"; tender_value?: number | null;
   sector?: Sector; lead_date?: string | null; quote_sent_date?: string | null; decided_date?: string | null;
   lead_source?: string; contact?: string; sales_stage?: SalesStage;
+  work_type?: string; value_band?: string; outcome_reason?: string;
 }
 
 export interface Attention { kind: string; message: string; sheet_id?: number; sheet?: string }

@@ -106,5 +106,36 @@ def test_sales_dashboard_endpoint(client):
     out = client.get("/api/sales/dashboard?sector=residential&months=12").json()
     assert out["leads"] >= 2 and set(out["conversion"]) >= {"lead_to_quote_pct", "quote_to_win_pct"}
     assert client.get("/api/sales/dashboard?sector=space").status_code == 422
-    assert client.put("/api/sales/settings", json={"lead_sources": ["Website", " ", "Builder"]}).json() == {"lead_sources": ["Website", "Builder"]}
+    assert client.put("/api/sales/settings", json={"lead_sources": ["Website", " ", "Builder", "website"]}).json()["lead_sources"] == ["Website", "Builder"]
     assert client.get("/api/sales/settings").json()["lead_sources"] == ["Website", "Builder"]
+
+
+def test_pick_lists_and_choices(client):
+    st = client.get("/api/sales/settings").json()
+    assert "Blocked drain" in st["work_types"]["maintenance"] and "Price too high" in st["lost_reasons"]
+    assert {"key": "20k-50k", "label": "$20k – $50k"} in st["value_bands"]
+
+    # Lists are edited one at a time; the others stay as they were.
+    out = client.put("/api/sales/settings", json={"work_types": {"maintenance": ["Blocked drain", "Hot water", ""]}}).json()
+    assert out["work_types"]["maintenance"] == ["Blocked drain", "Hot water"] and "New house" in out["work_types"]["residential"]
+    assert client.put("/api/sales/settings", json={"work_types": {"space": ["x"]}}).status_code == 422
+    client.put("/api/sales/settings", json={"lost_reasons": ["Price too high", "No response"]})
+    assert client.get("/api/sales/settings").json()["lost_reasons"] == ["Price too high", "No response"]
+
+    lead = client.post("/api/leads", json={"name": "Unit 4 hot water", "sector": "maintenance", "client": "Coast Strata",
+                                           "contact": "Jo 0400 111 222", "work_type": "Hot water", "value_band": "<5k"}).json()
+    assert lead["work_type"] == "Hot water" and lead["value_band"] == "<5k"
+    assert client.post("/api/leads", json={"name": "x", "value_band": "huge"}).status_code == 422
+    clients = client.get("/api/sales/clients").json()
+    strata = next(c for c in clients if c["name"] == "Coast Strata")
+    assert strata["contacts"] == ["Jo 0400 111 222"] and strata["sectors"] == ["maintenance"]
+
+    jid = lead["id"]
+    client.put(f"/api/jobs/{jid}/sales", json={"mark_quote_sent": True, "tender_value": 1800})
+    j = client.put(f"/api/jobs/{jid}/sales", json={"tender_result": "lost", "outcome_reason": "Price too high"}).json()
+    assert j["outcome_reason"] == "Price too high" and j["sales_stage"] == "lost"
+    d = client.get("/api/sales/dashboard?sector=maintenance").json()
+    assert {"reason": "Price too high", "count": 1, "value": 1800.0, "pct": 100.0} in d["lost_reasons"]
+    assert any(g["name"] == "Hot water" for g in d["by_work_type"]) and any(g["name"] == "Under $5k" for g in d["by_size"])
+    # Re-opened: the lost reason goes with it.
+    assert client.put(f"/api/jobs/{jid}/sales", json={"tender_result": "pending"}).json()["outcome_reason"] == ""

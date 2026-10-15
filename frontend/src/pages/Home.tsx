@@ -2,8 +2,9 @@ import { DragEvent, FormEvent, useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api, upload } from "../api";
 import { can, useApp } from "../App";
-import type { Job, SalesSettings, Sector } from "../types";
+import type { ClientChoice, Job, SalesSettings, Sector } from "../types";
 import { SECTOR_LABELS, STAGE_LABELS } from "../types";
+import { Chips, DateChips, PickOrNew } from "./Pick";
 
 type Kind = "hydraulic" | "civil";
 const ACCEPTED = [".pdf", ".docx", ".xlsx", ".xlsm", ".txt", ".csv"];
@@ -65,6 +66,7 @@ export default function Home() {
   });
   const setSector = (s: Sector) => { setSectorState(s); try { localStorage.setItem("home-sector", s); } catch { /* storage unavailable */ } };
   const [leadOpen, setLeadOpen] = useState(false);
+  const [clients, setClients] = useState<ClientChoice[]>([]);
   const nav = useNavigate();
   const { user } = useApp();
   const canHyd = can(user, "can_hydraulic");
@@ -77,6 +79,7 @@ export default function Home() {
       if (s.sectors.length && !s.sectors.some((x) => x.key === sector)) setSector(s.sectors[0].key);
     });
     load();
+    api.get<ClientChoice[]>("/api/sales/clients").then(setClients).catch(() => setClients([]));
     const t = setInterval(load, 5000); // keep the "Reading…" badges current
     return () => clearInterval(t);
   }, []);
@@ -114,14 +117,15 @@ export default function Home() {
         <span className="spacer" />
         <button className="primary" onClick={() => setLeadOpen(!leadOpen)}>+ New lead</button>
       </div>
-      {leadOpen && sales && <NewLead sector={sector} sources={sales.lead_sources} onDone={(id) => nav(`/jobs/${id}`)} onCancel={() => setLeadOpen(false)} />}
+      {leadOpen && sales && <NewLead sector={sector} sales={sales} clients={clients} onDone={(id) => nav(`/jobs/${id}`)} onCancel={() => setLeadOpen(false)} />}
       <section className="hero">
         <h1>New {SECTOR_LABELS[sector].toLowerCase()} estimate</h1>
         <p className="muted">Drop in the full tender: plans and documents together. The app sorts the drawings from the documents, reads the scales,
           takes off the quantities, and works out what the scope, specs and reports mean for the price. You check and approve.</p>
         <div className="row wrap job-details">
           <input placeholder="Job name (optional)" value={name} onChange={(e) => setName(e.target.value)} />
-          <input placeholder="Client / consultant (optional)" value={client} onChange={(e) => setClient(e.target.value)} />
+          <PickOrNew options={clientNames(clients, sector)} value={client} onChange={setClient} emptyLabel="Client (optional)"
+                     placeholder="New client name" newLabel="+ New client…" />
         </div>
         <div className={`dropzones ${canHyd && canCiv ? "" : "single"}`}>
           {canHyd && <DropZone kind="hydraulic" title="Hydraulic take-off" busy={progress !== null} onFiles={start}
@@ -174,42 +178,64 @@ export default function Home() {
   );
 }
 
-function NewLead({ sector, sources, onDone, onCancel }: { sector: Sector; sources: string[]; onDone: (id: number) => void; onCancel: () => void }) {
+/** Clients used in this sector first, then everyone else's. */
+export function clientNames(clients: ClientChoice[], sector: Sector): string[] {
+  return [...clients.filter((c) => c.sectors.includes(sector)), ...clients.filter((c) => !c.sectors.includes(sector))].map((c) => c.name);
+}
+
+function NewLead({ sector: startSector, sales, clients, onDone, onCancel }: {
+  sector: Sector; sales: SalesSettings; clients: ClientChoice[]; onDone: (id: number) => void; onCancel: () => void;
+}) {
   const { user } = useApp();
-  const [f, setF] = useState({ name: "", client: "", contact: "", lead_source: "", address: "", due_date: "", tender_value: "",
-    kind: can(user, "can_hydraulic") ? "hydraulic" : "civil" });
+  const kinds = ([["hydraulic", "Plumbing"], ["civil", "Civil"]] as const).filter(([k]) => can(user, k === "civil" ? "can_civil" : "can_hydraulic"));
+  const [f, setF] = useState({ sector: startSector, kind: kinds[0]?.[0] ?? "hydraulic", work_type: "", client: "", contact: "",
+    lead_source: "", value_band: "", due_date: "", name: "", address: "" });
+  const set = (k: keyof typeof f, v: string) => setF((x) => ({ ...x, [k]: v }));
   const [error, setError] = useState("");
+  const contacts = clients.find((c) => c.name.toLowerCase() === f.client.trim().toLowerCase())?.contacts ?? [];
+  const autoName = [f.work_type, f.client || f.address].filter(Boolean).join(" – ");
   const save = async (e: FormEvent) => {
     e.preventDefault();
     setError("");
+    const name = f.name.trim() || autoName;
+    if (!name) { setError("Pick the type of work and the client (or type a job name) so you can find it later."); return; }
     try {
-      const job = await api.post<Job>("/api/leads", { ...f, sector, due_date: f.due_date || null,
-        tender_value: f.tender_value ? Number(f.tender_value) : null });
+      const job = await api.post<Job>("/api/leads", { ...f, name, due_date: f.due_date || null });
       onDone(job.id);
     } catch (err) { setError((err as Error).message); }
   };
-  const field = (k: keyof typeof f, placeholder: string, type = "text") => (
-    <input type={type} placeholder={placeholder} value={f[k]} onChange={(e) => setF({ ...f, [k]: e.target.value })} required={k === "name"} />
-  );
   return (
     <form className="card lead-form" onSubmit={save}>
-      <h2>New {SECTOR_LABELS[sector].toLowerCase()} lead</h2>
-      <p className="small muted">For an enquiry before the plans arrive. Drop the plans on it later and it carries on from there.</p>
-      <div className="row wrap">
-        {field("name", "Job / site name")}
-        {field("client", "Client or builder")}
-        {field("contact", "Contact (name, phone, email)")}
-        <input list="lead-sources" placeholder="Where did it come from?" value={f.lead_source} onChange={(e) => setF({ ...f, lead_source: e.target.value })} />
-        <datalist id="lead-sources">{sources.map((s) => <option key={s} value={s} />)}</datalist>
+      <h2>New lead</h2>
+      <p className="small muted">Tap the answers. Only the client and type of work really matter; skip anything you don't know yet.</p>
+      <div className="q-grid">
+        {sales.sectors.length > 1 && <><span className="q">Sector</span>
+          <Chips options={sales.sectors.map((s) => ({ key: s.key, label: s.label }))} value={f.sector} required
+                 onChange={(v) => setF((x) => ({ ...x, sector: (v || x.sector) as Sector, work_type: "" }))} /></>}
+        {kinds.length > 1 && <><span className="q">Job type</span>
+          <Chips options={kinds.map(([key, label]) => ({ key, label }))} value={f.kind} required onChange={(v) => set("kind", v || f.kind)} /></>}
+        <span className="q">Type of work</span>
+        <Chips options={sales.work_types[f.sector] ?? []} value={f.work_type} onChange={(v) => set("work_type", v)} />
+        <span className="q">Client</span>
+        <PickOrNew options={clientNames(clients, f.sector)} value={f.client} onChange={(v) => setF((x) => ({ ...x, client: v, contact: "" }))}
+                   emptyLabel="Choose a client…" placeholder="New client name" newLabel="+ New client…" />
+        <span className="q">Contact</span>
+        <PickOrNew options={contacts} value={f.contact} onChange={(v) => set("contact", v)} emptyLabel={contacts.length ? "Choose a contact…" : "No contact yet"}
+                   placeholder="Name and phone / email" newLabel="+ New contact…" />
+        <span className="q">Where did it come from?</span>
+        <Chips options={sales.lead_sources} value={f.lead_source} onChange={(v) => set("lead_source", v)} />
+        <span className="q">Rough size</span>
+        <Chips options={sales.value_bands} value={f.value_band} onChange={(v) => set("value_band", v)} />
+        <span className="q">Quote due</span>
+        <DateChips value={f.due_date} onChange={(v) => set("due_date", v)} allowNone="No date"
+                   choices={[["Tomorrow", 1], ["In 3 days", 3], ["In a week", 7], ["In 2 weeks", 14]]} />
+        <span className="q">Job name <small className="muted">(optional)</small></span>
+        <div className="row wrap">
+          <input placeholder={autoName || "Job / site name"} value={f.name} onChange={(e) => set("name", e.target.value)} />
+          <input placeholder="Site address (optional)" value={f.address} onChange={(e) => set("address", e.target.value)} />
+        </div>
       </div>
-      <div className="row wrap">
-        {field("address", "Site address")}
-        <label className="inline small">Quote due {field("due_date", "", "date")}</label>
-        {field("tender_value", "Rough value $ (optional)", "number")}
-        <select value={f.kind} onChange={(e) => setF({ ...f, kind: e.target.value })}>
-          {can(user, "can_hydraulic") && <option value="hydraulic">Plumbing</option>}
-          {can(user, "can_civil") && <option value="civil">Civil</option>}
-        </select>
+      <div className="row">
         <button className="primary" type="submit">Add lead</button>
         <button type="button" onClick={onCancel}>Cancel</button>
       </div>

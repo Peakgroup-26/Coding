@@ -619,8 +619,12 @@ def set_program(ctx: Ctx, start_date="", target_weeks=0, plumbers=0):
        "quote_sent_date": {"type": "string", "description": "YYYY-MM-DD, or empty"},
        "decided_date": {"type": "string", "description": "YYYY-MM-DD, or empty"},
        "sector": {"type": "string", "enum": ["", "residential", "commercial", "maintenance"]},
-       "lead_source": {"type": "string", "description": "empty = leave"}, "contact": {"type": "string", "description": "empty = leave"}})
-def update_sales(ctx: Ctx, result="", value=0, mark_quote_sent=False, quote_sent_date="", decided_date="", sector="", lead_source="", contact=""):
+       "lead_source": {"type": "string", "description": "empty = leave"}, "contact": {"type": "string", "description": "empty = leave"},
+       "work_type": {"type": "string", "description": "Type of work, from the sector's list; empty = leave"},
+       "value_band": {"type": "string", "enum": ["", "<5k", "5k-20k", "20k-50k", "50k-150k", "150k-500k", "500k-1m", "1m+", "unknown"]},
+       "lost_reason": {"type": "string", "description": "Why it was lost or withdrawn, from the company's list; empty = leave"}})
+def update_sales(ctx: Ctx, result="", value=0, mark_quote_sent=False, quote_sent_date="", decided_date="", sector="", lead_source="", contact="",
+                 work_type="", value_band="", lost_reason=""):
     from datetime import date as _date
 
     from fastapi import HTTPException
@@ -631,7 +635,8 @@ def update_sales(ctx: Ctx, result="", value=0, mark_quote_sent=False, quote_sent
         body = SalesIn(tender_result=result or None, tender_value=value or None, mark_quote_sent=mark_quote_sent,
                        quote_sent_date=_date.fromisoformat(quote_sent_date) if quote_sent_date else None,
                        decided_date=_date.fromisoformat(decided_date) if decided_date else None,
-                       sector=sector or None, lead_source=lead_source or None, contact=contact or None)
+                       sector=sector or None, lead_source=lead_source or None, contact=contact or None,
+                       work_type=work_type or None, value_band=value_band or None, outcome_reason=lost_reason or None)
         if not value:
             body = body.model_copy(update={"tender_value": ctx.job.tender_value})
         apply_sales(ctx.db, ctx.job, body, ctx.user)
@@ -643,4 +648,5 @@ def update_sales(ctx: Ctx, result="", value=0, mark_quote_sent=False, quote_sent
     bits = [x for x in (result and f"result {result}", mark_quote_sent and "quote marked sent", value and f"${value:,.0f}",
                         sector and f"sector {sector}") if x]
     return ({"stage": j.sales_stage, "quote_sent_date": str(j.quote_sent_date), "decided_date": str(j.decided_date),
-             "result": j.tender_result, "value": j.tender_value}, "Sales: " + (", ".join(bits) or "updated"))
+             "result": j.tender_result, "value": j.tender_value,
+             "lost_reason": j.outcome_reason, "work_type": j.work_type}, "Sales: " + (", ".join(bits) or "updated"))

@@ -29,6 +29,13 @@ class LeadIn(BaseModel):
     due_date: date | None = None
     tender_value: float | None = Field(default=None, ge=0)  # rough value, if known
     address: str = ""
+    work_type: str = Field(default="", max_length=100)
+    value_band: str = ""
+
+
+def _check_band(band: str | None) -> None:
+    if band and band not in sales.BAND_LABELS:
+        raise HTTPException(422, "Pick a job size from the list")
 
 
 @router.post("/leads", response_model=JobOut)
@@ -38,6 +45,7 @@ def add_lead(body: LeadIn, db: Session = Depends(get_db), user: User = Depends(c
         raise HTTPException(422, "Choose a sector and a job type")
     if not can_sector(user, body.sector) or not can_kind(user, body.kind):
         raise HTTPException(403, "You don't have access to that kind of job")
+    _check_band(body.value_band)
     job = Job(**body.model_dump(), created_by=user.id)
     sales.prepare_new(db, job)
     db.add(job)
@@ -59,6 +67,10 @@ class SalesIn(BaseModel):
     lead_source: str | None = None
     contact: str | None = None
     due_date: date | None = None
+    work_type: str | None = Field(default=None, max_length=100)
+    value_band: str | None = None
+    outcome_reason: str | None = Field(default=None, max_length=100)
+    client: str | None = Field(default=None, max_length=255)
 
 
 def apply_sales(db: Session, job: Job, body: SalesIn, user: User) -> None:
@@ -71,8 +83,9 @@ def apply_sales(db: Session, job: Job, body: SalesIn, user: User) -> None:
         if not can_sector(user, body.sector):
             raise HTTPException(403, f"You don't have access to {body.sector} jobs")
         job.sector = body.sector
-    for k in ("lead_date", "lead_source", "contact", "due_date", "tender_value"):
-        if k in data:
+    _check_band(body.value_band)
+    for k in ("lead_date", "lead_source", "contact", "due_date", "tender_value", "work_type", "value_band", "client"):
+        if k in data and (data[k] is not None or k in ("due_date", "tender_value", "lead_date")):
             setattr(job, k, data[k])
     if body.mark_quote_sent and not job.quote_sent_date:
         job.quote_sent_date = date.today()
@@ -86,6 +99,10 @@ def apply_sales(db: Session, job: Job, body: SalesIn, user: User) -> None:
         if body.tender_result != job.tender_result:
             job.decided_date = None if body.tender_result == "pending" else (body.decided_date or date.today())
         job.tender_result = body.tender_result
+        if body.tender_result not in ("lost", "withdrawn"):
+            job.outcome_reason = ""
+    if body.outcome_reason is not None and job.tender_result in ("lost", "withdrawn"):
+        job.outcome_reason = body.outcome_reason
     if body.decided_date and job.tender_result != "pending":
         job.decided_date = body.decided_date
     ld = job.lead_date or (job.created_at.date() if job.created_at else None)
@@ -116,20 +133,50 @@ def dashboard(sector: str = "", months: int = 12, db: Session = Depends(get_db),
 def get_settings(db: Session = Depends(get_db), user: User = Depends(current_user)):
     visible = [s for s in sales.SECTORS if can_sector(user, s)]
     jobs = [j for j in db.scalars(select(Job)) if can_see_job(user, j)]
-    return {"lead_sources": sales.sources(db), "sectors": [{"key": k, "label": sales.SECTORS[k][0]} for k in visible],
+    return {"lead_sources": sales.sources(db), "lost_reasons": sales.lost_reasons(db), "work_types": sales.work_types(db),
+            "value_bands": [{"key": k, "label": lbl} for k, lbl in sales.VALUE_BANDS], "sectors": [{"key": k, "label": sales.SECTORS[k][0]} for k in visible],
             "stages": sales.STAGE_LABELS, "counts": sales.count_by_sector(db, jobs)}
 
 
-class SourcesIn(BaseModel):
-    lead_sources: list[str]
+class ListsIn(BaseModel):
+    lead_sources: list[str] | None = None
+    lost_reasons: list[str] | None = None
+    work_types: dict[str, list[str]] | None = None
+
+
+def _clean(items: list[str]) -> list[str]:
+    out: list[str] = []
+    for i in items:
+        i = i.strip()[:100]
+        if i and i.lower() not in (o.lower() for o in out):
+            out.append(i)
+    return out
 
 
 @router.put("/sales/settings")
-def put_settings(body: SourcesIn, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
-    clean = [s.strip()[:100] for s in body.lead_sources if s.strip()]
+def put_settings(body: ListsIn, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+    """The choices offered in the drop-downs. Send only the lists being changed."""
+    clean: dict = {}
+    if body.lead_sources is not None:
+        clean["lead_sources"] = _clean(body.lead_sources)
+    if body.lost_reasons is not None:
+        clean["lost_reasons"] = _clean(body.lost_reasons)
+    if body.work_types is not None:
+        if set(body.work_types) - set(sales.SECTORS):
+            raise HTTPException(422, "Unknown sector in work types")
+        clean["work_types"] = {k: _clean(v) for k, v in body.work_types.items()}
     s = db.get(AppSetting, "sales") or AppSetting(key="sales", value={})
-    s.value = {**(s.value or {}), "lead_sources": clean}
+    value = {**(s.value or {}), **clean}
+    if "work_types" in clean:
+        value["work_types"] = {**((s.value or {}).get("work_types") or {}), **clean["work_types"]}
+    s.value = value
     db.merge(s)
-    record(db, admin.id, "setting", 0, "update", after={"key": "sales", "lead_sources": clean})
+    record(db, admin.id, "setting", 0, "update", after={"key": "sales", **clean})
     db.commit()
-    return {"lead_sources": clean}
+    return {"lead_sources": sales.sources(db), "lost_reasons": sales.lost_reasons(db), "work_types": sales.work_types(db)}
+
+
+@router.get("/sales/clients")
+def clients(db: Session = Depends(get_db), user: User = Depends(current_user)):
+    """Clients (and their contacts) from the jobs this person can see, for the pick lists."""
+    return sales.clients([j for j in db.scalars(select(Job)) if can_see_job(user, j)])

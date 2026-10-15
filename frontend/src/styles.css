@@ -348,3 +348,27 @@ ul.plain li { margin: 5px 0; }
 .sectors-cell { white-space: nowrap; }
 svg.chart.funnel { max-width: 640px; }
 @media (max-width: 800px) { .pipeline { grid-template-columns: repeat(2, 1fr); } }
+
+/* Tap-to-pick answers (Pick.tsx) */
+.chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.chip { border: 1px solid var(--line); background: var(--card, #fff); border-radius: 18px; padding: 6px 13px; font-size: 14px; cursor: pointer; }
+.chip:hover { border-color: var(--accent); }
+.chip.on { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.q-grid { display: grid; grid-template-columns: 170px 1fr; gap: 12px 14px; align-items: center; margin: 12px 0; }
+.q { font-weight: 600; font-size: 14px; }
+.q-grid select, .pick-new input { min-width: 240px; }
+.pick-new { display: inline-flex; gap: 8px; align-items: center; }
+.ask { display: grid; gap: 8px; margin: 10px 0 4px; padding: 10px 12px; border-radius: 8px; background: #eef4fd; }
+.list-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
+@media (max-width: 640px) {
+  .q-grid { grid-template-columns: 1fr; gap: 6px; }
+  .q-grid .q { margin-top: 8px; }
+  .q-grid select, .pick-new input { min-width: 0; width: 100%; }
+}
+@media (max-width: 640px) {
+  .topbar { flex-wrap: wrap; gap: 6px 12px; }
+  .topbar nav { flex-wrap: wrap; gap: 6px 12px; }
+  .sector-tabs { flex-wrap: wrap; }
+  .job-card { flex-wrap: wrap; }
+}
+.list-grid textarea { font: inherit; }
