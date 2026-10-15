@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import { useApp } from "../App";
-import type { Benchmark, User } from "../types";
+import type { Benchmark } from "../types";
 
 const SERVICE_KINDS = ["drainage", "stormwater", "water", "fire", "gas", "other"];
 
 /** Admin-maintained lists. Items are retired (unticked "active"), never deleted, so old jobs keep their references. */
-export default function Admin() {
+export default function Admin({ embedded = false }: { embedded?: boolean }) {
   const { settings, reloadSettings } = useApp();
   const [error, setError] = useState("");
 
@@ -20,8 +20,8 @@ export default function Admin() {
   };
 
   return (
-    <main className="page">
-      <h1>Admin</h1>
+    <main className={embedded ? "" : "page"}>
+      {!embedded && <h1>Admin</h1>}
       {error && <p className="error">{error}</p>}
       <div className="admin-grid">
         <section className="card">
@@ -122,63 +122,8 @@ export default function Admin() {
 
         <Benchmarks />
         <SimproTemplate />
-        <Users />
       </div>
     </main>
-  );
-}
-
-function Users() {
-  const { user: me } = useApp();
-  const [users, setUsers] = useState<User[]>([]);
-  const [form, setForm] = useState({ email: "", name: "", role: "estimator", password: "" });
-  const [error, setError] = useState("");
-  const load = () => api.get<User[]>("/api/users").then(setUsers);
-  useEffect(() => { load(); }, []);
-  const patch = async (u: User, body: object) => {
-    setError("");
-    try { await api.patch(`/api/users/${u.id}`, body); load(); } catch (e) { setError((e as Error).message); }
-  };
-  const add = async () => {
-    setError("");
-    try { await api.post("/api/users", form); setForm({ email: "", name: "", role: "estimator", password: "" }); load(); }
-    catch (e) { setError((e as Error).message); }
-  };
-  return (
-    <section className="card">
-      <h2>Users</h2>
-      <table>
-        <thead><tr><th>Email</th><th>Name</th><th>Role</th><th>Active</th><th></th></tr></thead>
-        <tbody>
-          {users.map((u) => (
-            <tr key={u.id}>
-              <td>{u.email}</td>
-              <td>{u.name}</td>
-              <td>
-                <select value={u.role} disabled={u.id === me.id} onChange={(e) => patch(u, { role: e.target.value })}>
-                  <option value="estimator">Estimator</option><option value="reviewer">Reviewer</option><option value="admin">Admin</option>
-                </select>
-              </td>
-              <td><input type="checkbox" checked={u.active} disabled={u.id === me.id} onChange={(e) => patch(u, { active: e.target.checked })} /></td>
-              <td><button className="link" onClick={() => {
-                const pw = window.prompt(`New password for ${u.email} (8+ characters)`);
-                if (pw) patch(u, { password: pw });
-              }}>Reset password</button></td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <div className="row wrap">
-        <input placeholder="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-        <input placeholder="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-        <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
-          <option value="estimator">Estimator</option><option value="reviewer">Reviewer</option><option value="admin">Admin</option>
-        </select>
-        <input placeholder="Password (8+)" type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
-        <button onClick={add} disabled={!form.email || form.password.length < 8}>Add user</button>
-      </div>
-      {error && <p className="error">{error}</p>}
-    </section>
   );
 }
 

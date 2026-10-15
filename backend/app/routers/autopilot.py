@@ -7,6 +7,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from .. import autopilot
+from ..access import can_kind
 from ..audit import record, snapshot
 from ..auth import current_user
 from ..checks import run_checks
@@ -37,7 +38,9 @@ async def quick_start(
     """Make a job from a set of plans and start reading them straight away."""
     if kind not in ("hydraulic", "civil"):
         raise HTTPException(422, "kind must be hydraulic or civil")
-    job = Job(name=name.strip() or _job_name(files), client=client.strip(), kind=kind)
+    if not can_kind(user, kind):
+        raise HTTPException(403, f"You don't have access to {'civil' if kind == 'civil' else 'plumbing'} jobs")
+    job = Job(name=name.strip() or _job_name(files), client=client.strip(), kind=kind, created_by=user.id)
     db.add(job)
     db.flush()
     # Plans and tender documents can be dropped together; each file is sorted into one or the other.
@@ -109,10 +112,22 @@ def approve_all(job_id: int, db: Session = Depends(get_db), user: User = Depends
     ensure_open(db, job.id)
     if autopilot.is_running(job.id):
         raise HTTPException(409, "Wait for the read to finish before approving")
+    result = approve_suggestions(db, job, user)
+    db.commit()
+    return result
+
+
+def approve_suggestions(db: Session, job: Job, user: User, sheet_id: int | None = None, kinds=("run", "count")) -> dict:
+    """Approve suggested runs and/or counts on current sheets (one sheet, or all), then rebuild the
+    estimate and run the checks. The caller commits."""
     current = set(db.scalars(select(Sheet.id).where(Sheet.job_id == job.id, Sheet.is_current.is_(True))))
+    if sheet_id is not None:
+        current &= {sheet_id}
     approved = {"runs": 0, "counts": 0}
     styles_seen: dict[tuple, tuple] = {}
     for kind, model in (("run", Run), ("count", CountItem)):
+        if kind not in kinds:
+            continue
         for obj in db.scalars(select(model).where(model.job_id == job.id, model.status == "suggested")):
             if obj.sheet_id not in current:
                 continue
@@ -130,7 +145,6 @@ def approve_all(job_id: int, db: Session = Depends(get_db), user: User = Depends
     gen = generate(db, job.id)
     flags = run_checks(db, job.id)
     record(db, user.id, "job", job.id, "approve_all", after={"job_id": job.id, **approved})
-    db.commit()
     return {**approved, "estimate_lines": gen["lines"], "flags": len(flags)}
 
 

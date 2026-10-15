@@ -1,6 +1,7 @@
 import { FormEvent, Fragment, useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, download } from "../api";
+import { can, useApp } from "../App";
 import type { CivilBoq, CivilLine, Sheet } from "../types";
 
 const money = (n: number | null | undefined) =>
@@ -29,6 +30,7 @@ function NumberCell({ value, placeholder, onSave, disabled }: {
 }
 
 export default function CivilBoqView({ jobId, final, sheets }: { jobId: number; final: boolean; sheets: Sheet[] }) {
+  const { user } = useApp();
   const [boq, setBoq] = useState<CivilBoq | null>(null);
   const [open, setOpen] = useState<number | null>(null);
   const [error, setError] = useState("");
@@ -92,7 +94,7 @@ export default function CivilBoqView({ jobId, final, sheets }: { jobId: number; 
           <button className="big primary" disabled={final || !s.lines_suggested} onClick={approveAll}>Approve all ({s.lines_suggested})</button>
           <button className="big" onClick={() => download(`/api/jobs/${jobId}/civil/boq.xlsx`, "Civil_BOQ.xlsx")}>Download Excel BOQ</button>
           <button className="big" disabled={final} onClick={reprice}>Look up rates again</button>
-          <Link className="button big" to="/civil-rates">Previous job rates</Link>
+          {can(user, "can_past_rates") && <Link className="button big" to="/civil-rates">Previous job rates</Link>}
         </div>
         <p className="muted small">
           Yellow lines are the AI's suggestions and aren't in the total until ticked. Click a line to see which sheet each

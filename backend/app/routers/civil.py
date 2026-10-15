@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from .. import autopilot, civil
 from ..ai import get_reader
+from ..access import has
 from ..audit import record, snapshot
 from ..auth import current_user
 from ..db import get_db
@@ -118,12 +119,16 @@ def _line_out(l: CivilBoqLine, items: list[CivilTakeoffItem], sheets: dict) -> d
 
 
 @router.get("/jobs/{job_id}/civil/boq")
-def get_boq(job_id: int, db: Session = Depends(get_db), _: User = Depends(current_user)):
+def get_boq(job_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
     get_or_404(db, Job, job_id)
     lines = sorted(db.scalars(select(CivilBoqLine).where(CivilBoqLine.job_id == job_id)), key=lambda l: l.sort)
     items = list(db.scalars(select(CivilTakeoffItem).where(CivilTakeoffItem.job_id == job_id)))
     sheets = {s.id: s for s in db.scalars(select(Sheet).where(Sheet.job_id == job_id))}
-    return {"lines": [_line_out(l, items, sheets) for l in lines], "summary": civil.civil_summary(db, job_id),
+    out = [_line_out(l, items, sheets) for l in lines]
+    if not has(user, "can_past_rates"):
+        for o in out:  # the rate stays; which previous jobs it came from doesn't
+            o["rate_sources"] = []
+    return {"lines": out, "summary": civil.civil_summary(db, job_id),
             "categories": civil.CATEGORIES, "units": ["m", "m2", "m3", "ea", "t", "item"]}
 
 

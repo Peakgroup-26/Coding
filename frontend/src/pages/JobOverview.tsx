@@ -4,6 +4,7 @@ import { api, download, upload } from "../api";
 import type { AutopilotStatus, Job, Sheet } from "../types";
 import CivilBoqView from "./CivilBoq";
 import TenderDocs from "./TenderDocs";
+import ChatPanel from "./ChatPanel";
 
 const fmt = (n: number | undefined, dp = 0) => (n ?? 0).toLocaleString("en-AU", { maximumFractionDigits: dp, minimumFractionDigits: dp });
 
@@ -131,6 +132,7 @@ export default function JobOverview() {
   const waiting = (s.runs_suggested ?? 0) + (s.counts_suggested ?? 0);
 
   return (
+    <div className="with-chat">
     <main className="page overview">
       <div className="row wrap">
         <Link to="/">← All jobs</Link>
@@ -164,7 +166,7 @@ export default function JobOverview() {
           </div>
 
           <NeedsYou items={st.attention} />
-          <TenderDocs jobId={jobId} civil={false} final={job.status === "final"} running={running}
+          <TenderDocs jobId={jobId} civil={false} final={job.status === "final"} running={running} version={changes}
                       onChanged={() => { setChanges((c) => c + 1); poll(); }} />
 
           <section className="card actions">
@@ -207,7 +209,7 @@ export default function JobOverview() {
       {!running && civil && (
         <>
           <NeedsYou items={st.attention} />
-          <TenderDocs jobId={jobId} civil final={job.status === "final"} running={running}
+          <TenderDocs jobId={jobId} civil final={job.status === "final"} running={running} version={changes}
                       onChanged={() => { setChanges((c) => c + 1); poll(); }} />
           <CivilBoqView key={changes} jobId={jobId} final={job.status === "final"} sheets={sheets} />
         </>
@@ -222,5 +224,7 @@ export default function JobOverview() {
         </div>
       )}
     </main>
+    <ChatPanel jobId={jobId} kind={civil ? "civil" : "hydraulic"} onChanged={() => { setChanges((c) => c + 1); poll(); }} />
+    </div>
   );
 }

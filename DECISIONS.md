@@ -189,3 +189,19 @@ These are choices made where the brief left room, as it asks. Each one can be re
 77. **Specified materials override what the drawing reading says,** for that service, on this job only. Existing runs are changed when the requirement is accepted, and new runs from later reads use it automatically. A material the price book doesn't know yet is created (waste 0%) so it can be mapped; until it's mapped, pricing lists it as unmapped rather than guessing a price.
 
 78. **Long documents are read in parts** (about 150,000 characters each, split at page breaks), and duplicate items across parts are merged. Scanned PDFs with no text are sent to the AI as PDFs (up to 30 MB). The document text is kept so it can be re-read later without the original.
+
+## Permissions, chat and memory
+
+79. **Permissions are enforced once, centrally.** Every router runs `access.enforce`. It finds the job behind any id in the URL (job, sheet, run, count, line, document, requirement, allowance, level, flag, viewport, generated item) and answers 404 if the person can't see it, so a new route can't forget the check. Areas without a job (the past-rates library, pricing edits) are checked by path. The job list is filtered the same way. Five permissions cover what was asked. Roles (estimator, reviewer, admin) keep their meaning for sign-off.
+
+80. **"Everyone's jobs" covers previous tenders.** With it off, a person sees only the jobs they started. Jobs made before this change have no recorded starter, so only people with "Everyone's jobs" (and admins) see them.
+
+81. **People without the past-rates permission still get civil lines priced from history.** The rate is shown, but which previous jobs it came from is hidden. Otherwise the permission would stop them pricing at all.
+
+82. **The chat acts through tools, not free text.** About 25 tools wrap the same functions as the buttons. Each change is audited under the person chatting. Changing tools refuse while the job is final or while the autopilot is reading it. Bulk changes over 20 items need the person's confirmation. Approvals only happen when asked, and AI-created items stay suggestions, so the brief's sign-off rule still holds.
+
+83. **The conversation history is append-only,** as the current Claude API requires for its thinking blocks. The system prompt (instructions, job, memories) and the tool list are fixed when a session starts. The job's live state goes into each new user message instead. Messages are stored and replayed exactly as received. A long conversation (about 100k tokens) is summarised into a fresh session. As a safety net, a history that somehow fails the check drops the stale thinking (`drop_block`) rather than failing the message. One conversation per job is shared, and a per-job lock stops two people's messages interleaving.
+
+84. **Memory is plain sentences people can read and edit,** scoped to company, client or job. The AI decides when to save one (preferences, rules, corrections), and admins can edit, switch off or add their own. Memories feed both the chat and the autopilot's reads.
+
+85. **Speech uses the browser's built-in recognition** rather than another cloud service, because the Claude API doesn't transcribe audio. It needs HTTPS (the Plesk setup has it) and works in Chrome, Edge and Safari. Chrome and Edge send the audio to Google or Microsoft for recognition. Replies can be read aloud with the browser's speech synthesis, which runs on the device.

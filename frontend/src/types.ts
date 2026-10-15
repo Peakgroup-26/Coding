@@ -1,6 +1,14 @@
 export type Pt = [number, number];
 
-export interface User { id: number; email: string; name: string; role: "estimator" | "reviewer" | "admin"; active: boolean }
+export interface Permissions { can_hydraulic: boolean; can_civil: boolean; can_all_jobs: boolean; can_past_rates: boolean; can_pricing: boolean }
+export interface User extends Permissions { id: number; email: string; name: string; role: "estimator" | "reviewer" | "admin"; active: boolean }
+
+export interface ChatAction { tool: string; summary: string }
+export interface ChatMsg { id: number; role: "user" | "assistant" | "note"; text: string; actions: ChatAction[]; user?: string; at?: string }
+export interface Memory {
+  id: number; scope: "company" | "client" | "job"; client: string; job_id: number | null; job: string; kind: string;
+  text: string; active: boolean; created_by: string; created_at: string;
+}
 export interface Stage { id: number; name: string; order: number; active: boolean }
 export interface Service { id: number; code: string; name: string; colour: string; kind: string; default_stage_id: number | null; order: number; active: boolean }
 export interface Material { id: number; name: string; waste_pct: number; active: boolean }
@@ -11,7 +19,7 @@ export interface Job {
   id: number; name: string; client: string; builder: string; address: string;
   quote_no: string; due_date: string | null; status: string;
   signed_off_by: number | null; signed_off_at: string | null; checks_run_at: string | null;
-  kind?: "hydraulic" | "civil"; created_at?: string | null; autopilot?: AutopilotStatus | null;
+  kind?: "hydraulic" | "civil"; created_at?: string | null; autopilot?: AutopilotStatus | null; created_by?: number | null;
 }
 
 export interface Attention { kind: string; message: string; sheet_id?: number; sheet?: string }

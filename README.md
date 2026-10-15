@@ -19,6 +19,23 @@ For a **hydraulic** set, the autopilot:
 
 The overview then shows what it found, what needs you, and three steps: **check it on the drawings**, **approve everything**, and **download the Excel BOQ** (or Simpro CSV). Nothing the AI finds counts until it's approved. Approving also saves the line colours for that client, so the next set from the same consultant is read the same way without asking the AI.
 
+## Signing in, permissions and the admin portal
+
+Everyone signs in with email and password (or Microsoft 365 once it's set up) and can change their password under **My account**. The **Admin portal** (admins only) has four tabs:
+
+- **People & permissions:** add people and tick what each can see. The options are *Plumbing* jobs, *Civil* jobs, *Everyone's jobs* (other people's and previous tenders; off means only jobs they started), *Past civil rates* (the previous-jobs rates library) and *Edit pricing* (price books, mappings, rules). Admins always see everything. The server enforces these on every request, for any job, sheet, line or document, so hiding a menu isn't the only protection.
+- **All jobs:** every plumbing and civil job, who started it, and where it's up to.
+- **AI memory:** see below.
+- **Lists & settings:** services, stages, materials, count items, benchmarks and the Simpro layout.
+
+## The AI chat panel and memory
+
+Every job has an **Ask the AI** panel down the right-hand side. Tell it what to do, typed or spoken: "make all the sanitary DN150", "trace the green dashed line as 25 copper cold water", "count every FW", "accept the tender items but make night works 15%", "add 120 m of kerb at $85", "what's still to do?". It uses the same actions as the buttons, under the person's own name in the audit log. It lists what it did under each reply. Anything it adds is still a suggestion until approved, and it asks before changing more than 20 things at once.
+
+- **Microphone:** press 🎤 and talk. *Hands-free* sends as soon as you stop talking; *read aloud* speaks the replies. This uses the browser's own speech recognition (Chrome, Edge, Safari) and needs HTTPS. Chrome and Edge send the audio to Google or Microsoft to turn it into text; the text then goes to Anthropic like a typed message.
+- **Memory:** when you tell it a preference or correct it ("ABC always draw sewer in brown", "we always use Rehau for acoustic"), it saves a memory for all jobs, that client, or that job. Memories go into every later chat and every automatic read they apply to. Admins can edit, switch off or add memories in the admin portal.
+- **One conversation per job,** shared by everyone working on it. Long conversations are summarised automatically, and *New chat* starts afresh (memories carry over).
+
 ## Tender documents
 
 Drop the scope of works, specifications, acoustic reports, design briefs, addenda and tender conditions in with the plans (PDF, Word, Excel or text), or add them later from the job page. The app tells documents from drawings by page size: mostly-A4 PDFs are documents. The AI reads each document **before** the drawings, and lists what changes the take-off or the price. Each item quotes the document's own words and page:
@@ -299,6 +316,9 @@ backend/app/
   autoscale.py        confirms a scale against dimension strings on the sheet
   civil.py            civil BOQ: rate import, merging, pricing from past jobs, export
   tender.py           tender documents: reading, and applying / undoing their requirements
+  access.py           permissions, checked on every request
+  chat.py, chat_tools.py   the chat panel: conversation handling and the actions the AI can take
+  memory.py           the AI's memory
   revision.py         revision compare
   markup.py           marked-up PDF
   sso.py              Microsoft 365 sign-on

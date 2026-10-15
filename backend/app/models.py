@@ -5,7 +5,7 @@ Geometry is stored in sheet coordinates: PDF points (1/72 inch) on the page as d
 """
 from datetime import date, datetime, timezone
 
-from sqlalchemy import JSON, Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import JSON, Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint, true
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .db import Base
@@ -23,6 +23,12 @@ class User(Base):
     role: Mapped[str] = mapped_column(String(20), default="estimator")  # estimator | reviewer | admin
     password_hash: Mapped[str] = mapped_column(String(255))
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # What this user can see and do. Admins can always do everything.
+    can_hydraulic: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())  # plumbing jobs
+    can_civil: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())  # civil jobs
+    can_all_jobs: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())  # other people's and previous tenders
+    can_past_rates: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())  # previous civil job rates
+    can_pricing: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())  # price books, mappings, rules
 
 
 class Stage(Base):
@@ -92,6 +98,7 @@ class Job(Base):
     checks_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     kind: Mapped[str] = mapped_column(String(20), default="hydraulic", server_default="hydraulic")  # hydraulic | civil
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     # Progress of the automatic read: {state, step, done, total, started_at, finished_at, attention: [...], summary}
     autopilot: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     # Set by accepted tender requirements (tender.py):
@@ -601,3 +608,46 @@ class TenderRequirement(Base):
     applied: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     decided_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+# --- AI memory and chat ---
+class AiMemory(Base):
+    """Something the AI has learnt and should remember: for every job (company), for one client's
+    jobs, or for one job. People can see, edit and delete these in the admin portal."""
+    __tablename__ = "ai_memories"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    scope: Mapped[str] = mapped_column(String(10))  # company | client | job
+    client: Mapped[str] = mapped_column(String(255), default="")
+    job_id: Mapped[int | None] = mapped_column(ForeignKey("jobs.id", ondelete="CASCADE"), nullable=True, index=True)
+    kind: Mapped[str] = mapped_column(String(20), default="")  # hydraulic | civil | "" (both)
+    text: Mapped[str] = mapped_column(Text)
+    source_job_id: Mapped[int | None] = mapped_column(Integer, nullable=True)  # the job it was learnt on
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class ChatSession(Base):
+    """One conversation with the AI about a job. Its system prompt and tools are fixed when it
+    starts, and messages are only ever appended (the API requires the history to stay unchanged)."""
+    __tablename__ = "chat_sessions"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id", ondelete="CASCADE"), index=True)
+    system: Mapped[str] = mapped_column(Text, default="")
+    tool_names: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    summary: Mapped[str] = mapped_column(Text, default="")  # carried over from the previous session
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class ChatMessage(Base):
+    __tablename__ = "chat_messages"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    session_id: Mapped[int] = mapped_column(ForeignKey("chat_sessions.id", ondelete="CASCADE"), index=True)
+    role: Mapped[str] = mapped_column(String(10))  # user | assistant
+    content: Mapped[list] = mapped_column(JSON)  # API content blocks, exactly as sent / received
+    text: Mapped[str] = mapped_column(Text, default="")  # what to show on screen
+    actions: Mapped[list | None] = mapped_column(JSON, nullable=True)  # [{tool, summary}] for display
+    hidden: Mapped[bool] = mapped_column(Boolean, default=False)  # tool results and the like
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

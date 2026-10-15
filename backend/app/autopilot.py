@@ -113,7 +113,11 @@ def _run(job_id: int, user_id: int, reread: bool) -> None:
 
         read_documents(db, job, user, p, reader)
         if reader is not None:
-            reader.context = context_for(db, job.id)
+            from .memory import as_text, for_job
+
+            remembered = as_text(for_job(db, job))
+            reader.context = context_for(db, job.id) + (
+                "\n\nThings the estimators have told the AI to remember:\n" + remembered if remembered else "")
         if job.kind == "civil":
             from .civil import run_civil
 

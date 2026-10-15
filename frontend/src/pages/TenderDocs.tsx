@@ -71,8 +71,8 @@ function Editor({ r, civil, categories, onSave }: {
   return null;
 }
 
-export default function TenderDocs({ jobId, civil, final, running, onChanged }: {
-  jobId: number; civil: boolean; final: boolean; running: boolean; onChanged: () => void;
+export default function TenderDocs({ jobId, civil, final, running, version = 0, onChanged }: {
+  jobId: number; civil: boolean; final: boolean; running: boolean; version?: number; onChanged: () => void;
 }) {
   const [docs, setDocs] = useState<TenderDoc[]>([]);
   const [list, setList] = useState<RequirementList | null>(null);
@@ -89,7 +89,7 @@ export default function TenderDocs({ jobId, civil, final, running, onChanged }: 
     setDocs(d);
     setList(l);
   }, [jobId]);
-  useEffect(() => { load(); }, [load, running]);
+  useEffect(() => { load(); }, [load, running, version]);
   useEffect(() => {
     if (civil) api.get<{ categories: string[] }>(`/api/jobs/${jobId}/civil/boq`).then((b) => setCategories(b.categories));
   }, [civil, jobId]);

@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .. import config, storage
+from ..access import can_kind, can_see_job
 from ..audit import record, snapshot
 from ..auth import current_user
 from ..db import get_db
@@ -20,13 +21,17 @@ router = APIRouter(prefix="/api", tags=["jobs"])
 
 
 @router.get("/jobs", response_model=list[JobOut])
-def list_jobs(db: Session = Depends(get_db), _: User = Depends(current_user)):
-    return db.scalars(select(Job).order_by(Job.id.desc())).all()
+def list_jobs(kind: str = "", db: Session = Depends(get_db), user: User = Depends(current_user)):
+    """The jobs this user may see, newest first. kind=hydraulic or civil narrows it."""
+    jobs = [j for j in db.scalars(select(Job).order_by(Job.id.desc())) if can_see_job(user, j)]
+    return [j for j in jobs if not kind or (j.kind or "hydraulic") == kind]
 
 
 @router.post("/jobs", response_model=JobOut)
 def create_job(body: JobIn, db: Session = Depends(get_db), user: User = Depends(current_user)):
-    job = Job(**body.model_dump())
+    if not can_kind(user, body.kind):
+        raise HTTPException(403, f"You don't have access to {body.kind} jobs")
+    job = Job(**body.model_dump(), created_by=user.id)
     db.add(job)
     db.flush()
     record(db, user.id, "job", job.id, "create", after=snapshot(job))

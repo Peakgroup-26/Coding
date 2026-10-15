@@ -1,16 +1,17 @@
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import config
+from .access import enforce
 from .db import SessionLocal, engine
 from .migrate import migrate
 from .autopilot import recover_interrupted
-from .routers import ai, auth_users, autopilot, civil, estimate, jobs, polish, pricing, rules, settings, sheets, takeoff, tender
+from .routers import ai, auth_users, autopilot, chat, civil, estimate, jobs, polish, pricing, rules, settings, sheets, takeoff, tender
 from .seed import seed
 
 logging.basicConfig(level=logging.INFO)
@@ -31,8 +32,8 @@ def create_app() -> FastAPI:
     app = FastAPI(title="Peak Hydraulic Take-off", lifespan=lifespan)
     app.add_middleware(CORSMiddleware, allow_origins=config.CORS_ORIGINS, allow_methods=["*"], allow_headers=["*"])
     for r in (auth_users.router, settings.router, jobs.router, sheets.router, takeoff.router, rules.router, estimate.router, pricing.router, ai.router, polish.router,
-              autopilot.router, civil.router, tender.router):
-        app.include_router(r)
+              autopilot.router, civil.router, tender.router, chat.router):
+        app.include_router(r, dependencies=[Depends(enforce)])  # access.enforce: who can see which job
 
     @app.get("/api/health")
     def health():

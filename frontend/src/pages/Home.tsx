@@ -1,6 +1,7 @@
 import { DragEvent, useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api, upload } from "../api";
+import { can, useApp } from "../App";
 import type { Job } from "../types";
 
 type Kind = "hydraulic" | "civil";
@@ -56,7 +57,11 @@ export default function Home() {
   const [progress, setProgress] = useState<number | null>(null);
   const [error, setError] = useState("");
   const [filter, setFilter] = useState("");
+  const [kind, setKind] = useState<"" | Kind>("");
   const nav = useNavigate();
+  const { user } = useApp();
+  const canHyd = can(user, "can_hydraulic");
+  const canCiv = can(user, "can_civil");
 
   const load = () => api.get<Job[]>("/api/jobs").then(setJobs);
   useEffect(() => {
@@ -83,7 +88,8 @@ export default function Home() {
     }
   };
 
-  const shown = jobs.filter((j) => !filter || `${j.name} ${j.client} ${j.quote_no}`.toLowerCase().includes(filter.toLowerCase()));
+  const shown = jobs.filter((j) => (!kind || (j.kind ?? "hydraulic") === kind)
+    && (!filter || `${j.name} ${j.client} ${j.quote_no}`.toLowerCase().includes(filter.toLowerCase())));
 
   return (
     <main className="page home">
@@ -95,11 +101,11 @@ export default function Home() {
           <input placeholder="Job name (optional)" value={name} onChange={(e) => setName(e.target.value)} />
           <input placeholder="Client / consultant (optional)" value={client} onChange={(e) => setClient(e.target.value)} />
         </div>
-        <div className="dropzones">
-          <DropZone kind="hydraulic" title="Hydraulic take-off" busy={progress !== null} onFiles={start}
-                    blurb="Pipe runs, fixtures and fittings from hydraulic services plans." />
-          <DropZone kind="civil" title="Civil BOQ" busy={progress !== null} onFiles={start}
-                    blurb="Bill of quantities from civil plans, priced from your previous civil jobs." />
+        <div className={`dropzones ${canHyd && canCiv ? "" : "single"}`}>
+          {canHyd && <DropZone kind="hydraulic" title="Hydraulic take-off" busy={progress !== null} onFiles={start}
+                    blurb="Pipe runs, fixtures and fittings from hydraulic services plans." />}
+          {canCiv && <DropZone kind="civil" title="Civil BOQ" busy={progress !== null} onFiles={start}
+                    blurb="Bill of quantities from civil plans, priced from your previous civil jobs." />}
         </div>
         {progress !== null && (
           <div className="upload-progress">
@@ -112,7 +118,14 @@ export default function Home() {
 
       <section className="card">
         <div className="row">
-          <h2 style={{ margin: 0 }}>Your jobs</h2>
+          <h2 style={{ margin: 0 }}>{can(user, "can_all_jobs") ? "Jobs" : "Your jobs"}</h2>
+          {canHyd && canCiv && (
+            <div className="tabs" style={{ margin: 0 }}>
+              {([["", "All"], ["hydraulic", "Plumbing"], ["civil", "Civil"]] as const).map(([k, l]) => (
+                <button key={k} className={kind === k ? "active" : ""} onClick={() => setKind(k)}>{l}</button>
+              ))}
+            </div>
+          )}
           <span className="spacer" />
           <input placeholder="Search jobs" value={filter} onChange={(e) => setFilter(e.target.value)} />
         </div>
