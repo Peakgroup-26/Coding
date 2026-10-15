@@ -243,6 +243,9 @@ def build_lines(db: Session, job: Job, user: User, reader, p=None) -> int:
                 p.attention("ai", f"Couldn't merge repeated items automatically ({e}); each sheet's items are listed separately.")
     by_id = {i.id: i for i in items}
     used: set[int] = set()
+    # Categories the tender documents exclude ("by others") are left out of the BOQ.
+    excluded = {x.split(":", 1)[1] for x in (job.excluded_services or []) if x.startswith("civil:")}
+    used.update(i.id for i in items if i.category in excluded)
     plan = []
     for g in groups or []:
         ids = [x for x in g.item_ids if x in by_id and x not in used]
@@ -350,13 +353,30 @@ def reprice(db: Session, job_id: int, reader=None) -> int:
 
 
 # --- totals and export ---
+def loadings(job: Job, approved: list[CivilBoqLine]) -> list[dict]:
+    """% loadings from accepted tender requirements, on the approved lines they cover."""
+    out = []
+    for a in job.rate_adjustments or []:
+        cat = a.get("civil_category") or ""
+        base = sum((money(line_qty(l)) * money(l.rate or 0) for l in approved if not cat or l.category == cat), Decimal(0))
+        pct = Decimal(str(a.get("percent") or 0))
+        out.append({"label": a.get("label", "Loading"), "percent": float(pct), "category": cat,
+                    "amount": money(base * pct / 100)})
+    return out
+
+
 def civil_summary(db: Session, job_id: int) -> dict:
+    job = db.get(Job, job_id)
     lines = list(db.scalars(select(CivilBoqLine).where(CivilBoqLine.job_id == job_id)))
     approved = [l for l in lines if l.status == "confirmed"]
-    total = sum((money(line_qty(l)) * money(l.rate or 0) for l in approved), Decimal(0))
+    subtotal = sum((money(line_qty(l)) * money(l.rate or 0) for l in approved), Decimal(0))
+    loads = loadings(job, approved)
+    total = subtotal + sum((x["amount"] for x in loads), Decimal(0))
     return {"lines": len(lines), "lines_suggested": len(lines) - len(approved), "lines_confirmed": len(approved),
             "needs_measuring": sum(1 for l in lines if l.needs_measuring),
             "unpriced": sum(1 for l in lines if l.rate is None),
+            "lines_total_ex_gst": float(money(subtotal)),
+            "loadings": [{**x, "amount": float(x["amount"])} for x in loads],
             "total_confirmed_ex_gst": float(money(total))}
 
 
@@ -404,6 +424,10 @@ def export_boq(db: Session, job: Job) -> bytes:
         ws[ws.max_row][1].font = bold
         ws[ws.max_row][5].font = bold
         grand += sub
+    for ld in loadings(job, approved):
+        ws.append(["", f"{ld['label']}: +{ld['percent']:g}% on {ld['category'] or 'all lines'} (tender documents)", "", "", "",
+                   float(ld["amount"])])
+        grand += ld["amount"]
     ws.append([])
     ws.append(["", "TOTAL (ex GST)", "", "", "", float(money(grand))])
     for c in ws[ws.max_row]:
@@ -422,6 +446,17 @@ def export_boq(db: Session, job: Job) -> bytes:
             c.font = bold
         for l in pending:
             wp.append([l.description, l.unit, line_qty(l), l.rate, "Yes" if l.needs_measuring else "", l.rate_note])
+    from .tender import notes_rows
+
+    notes = notes_rows(db, job.id)
+    if notes:
+        wn = wb.create_sheet("Tender notes")
+        wn.append(["Type", "Item", "What the document says", "Document", "Status"])
+        for c in wn[1]:
+            c.font = bold
+        for r in notes:
+            wn.append(r)
+        wn.column_dimensions["B"].width, wn.column_dimensions["C"].width = 40, 90
     wt = wb.create_sheet("Quantities by sheet")
     wt.append(["Sheet", "Category", "Description", "Unit", "Qty", "Where it came from", "AI confidence"])
     for c in wt[1]:

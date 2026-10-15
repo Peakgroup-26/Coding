@@ -137,8 +137,10 @@ def test_autopilot_without_ai_or_dimensions_asks_for_help(client):
     assert not sheet["scale_verified"] and sheet["calibrated_scale"]  # scale set from the title block, waiting for a check
 
 
-def test_quick_start_rejects_non_pdfs(client):
-    r = client.post("/api/quick-start", data={"kind": "hydraulic"}, files=[("files", ("notes.txt", b"hello", "text/plain"))])
+def test_quick_start_rejects_other_files(client):
+    r = client.post("/api/quick-start", data={"kind": "hydraulic"}, files=[("files", ("setup.exe", b"MZ", "application/octet-stream"))])
+    assert r.status_code == 422
+    r = client.post("/api/quick-start", data={"kind": "hydraulic"}, files=[("files", ("fake.pdf", b"hello", "application/pdf"))])
     assert r.status_code == 422
 
 

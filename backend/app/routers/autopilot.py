@@ -3,7 +3,7 @@ import re
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from .. import autopilot
@@ -11,11 +11,11 @@ from ..audit import record, snapshot
 from ..auth import current_user
 from ..checks import run_checks
 from ..db import get_db
-from ..models import AiOutcome, CountItem, Job, Run, Sheet, StyleMapping, User
+from ..models import AiOutcome, CountItem, Job, Run, Sheet, StyleMapping, TenderDocument, TenderRequirement, User
 from ..rules import generate
 from ..schemas import JobOut
 from . import ensure_open, get_or_404
-from .jobs import store_upload
+from .tender import store_any
 
 router = APIRouter(prefix="/api", tags=["autopilot"])
 
@@ -40,8 +40,9 @@ async def quick_start(
     job = Job(name=name.strip() or _job_name(files), client=client.strip(), kind=kind)
     db.add(job)
     db.flush()
+    # Plans and tender documents can be dropped together; each file is sorted into one or the other.
     for up in files:
-        await store_upload(db, job, up, user, status="queued")
+        await store_any(db, job, up, user)
     record(db, user.id, "job", job.id, "create", after=snapshot(job))
     db.commit()
     autopilot.start(job.id, user.id)
@@ -58,7 +59,7 @@ async def add_plans(job_id: int, files: list[UploadFile] = File(...), db: Sessio
     if autopilot.is_running(job.id):
         raise HTTPException(409, "This job is still being read. Add the plans when it has finished.")
     for up in files:
-        await store_upload(db, job, up, user, status="queued")
+        await store_any(db, job, up, user)
     db.commit()
     autopilot.start(job.id, user.id)
     db.refresh(job)
@@ -90,6 +91,10 @@ def status(job_id: int, db: Session = Depends(get_db), _: User = Depends(current
     else:
         out["summary"] = autopilot.summary(db, job.id)
     out["running"] = autopilot.is_running(job.id)
+    reqs = list(db.scalars(select(TenderRequirement).where(TenderRequirement.job_id == job.id)))
+    out["tender"] = {"documents": db.scalar(select(func.count(TenderDocument.id)).where(TenderDocument.job_id == job.id)) or 0,
+                     "requirements": len(reqs), "suggested": sum(1 for r in reqs if r.status == "suggested"),
+                     "accepted": sum(1 for r in reqs if r.status == "accepted")}
     return out
 
 

@@ -4,6 +4,7 @@ import { api, upload } from "../api";
 import type { Job } from "../types";
 
 type Kind = "hydraulic" | "civil";
+const ACCEPTED = [".pdf", ".docx", ".xlsx", ".xlsm", ".txt", ".csv"];
 
 /** Where a job is up to, in plain words. */
 export function jobStage(j: Job): { text: string; tone: "busy" | "ok" | "warn" | "bad" | "plain" } {
@@ -24,7 +25,7 @@ function DropZone({ kind, title, blurb, busy, onFiles }: {
   const [over, setOver] = useState(false);
   const input = useRef<HTMLInputElement>(null);
   const take = (list: FileList | null) => {
-    const files = Array.from(list ?? []).filter((f) => f.name.toLowerCase().endsWith(".pdf"));
+    const files = Array.from(list ?? []).filter((f) => ACCEPTED.some((ext) => f.name.toLowerCase().endsWith(ext)));
     if (files.length) onFiles(kind, files);
   };
   const drop = (e: DragEvent) => { e.preventDefault(); setOver(false); if (!busy) take(e.dataTransfer.files); };
@@ -42,8 +43,8 @@ function DropZone({ kind, title, blurb, busy, onFiles }: {
       <div className="dz-icon">{kind === "civil" ? "🛣️" : "🚿"}</div>
       <h2>{title}</h2>
       <p>{blurb}</p>
-      <p className="dz-hint">Drop the PDF plans here, or click to choose them</p>
-      <input ref={input} type="file" accept="application/pdf,.pdf" multiple hidden onChange={(e) => take(e.target.files)} />
+      <p className="dz-hint">Drop the plans here, plus any scope, specs, acoustic reports, briefs or addenda. Or click to choose them.</p>
+      <input ref={input} type="file" accept={ACCEPTED.join(",")} multiple hidden onChange={(e) => take(e.target.files)} />
     </div>
   );
 }
@@ -88,7 +89,8 @@ export default function Home() {
     <main className="page home">
       <section className="hero">
         <h1>Start a new estimate</h1>
-        <p className="muted">Drop in the full set of plans. The app sorts the sheets, reads the scales and takes off the quantities for you to check.</p>
+        <p className="muted">Drop in the full tender: plans and documents together. The app sorts the drawings from the documents, reads the scales,
+          takes off the quantities, and works out what the scope, specs and reports mean for the price. You check and approve.</p>
         <div className="row wrap job-details">
           <input placeholder="Job name (optional)" value={name} onChange={(e) => setName(e.target.value)} />
           <input placeholder="Client / consultant (optional)" value={client} onChange={(e) => setClient(e.target.value)} />

@@ -106,12 +106,15 @@ def create_suggested_runs(db: Session, sheet: Sheet, assigns: list[dict], user: 
             "skipped_viewport_edge": skipped_scale}
 
 
-def count_tagged_items(db: Session, sheet: Sheet, tags: list[dict], user: User) -> int:
+def count_tagged_items(db: Session, sheet: Sheet, tags: list[dict], user: User, excluded: set[str] = frozenset()) -> int:
     """Suggest a count at every place a tag (e.g. "FW") is printed on the sheet.
 
-    tags: [{"tag": "FW", "item_type": "Floor waste"}]. Skips spots that already have a count of that type.
+    tags: [{"tag": "FW", "item_type": "Floor waste"}]. Skips spots that already have a count of that type,
+    and items whose service is in `excluded` (service codes).
     """
-    types = {c.name: c for c in db.scalars(select(CountType).where(CountType.active.is_(True)))}
+    codes = {s.id: s.code for s in db.scalars(select(Service))}
+    types = {c.name: c for c in db.scalars(select(CountType).where(CountType.active.is_(True)))
+             if codes.get(c.default_service_id) not in excluded}
     wanted = {}
     for t in tags:
         tag = (t.get("tag") or "").strip().upper()

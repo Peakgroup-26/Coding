@@ -19,6 +19,20 @@ For a **hydraulic** set, the autopilot:
 
 The overview then shows what it found, what needs you, and three steps: **check it on the drawings**, **approve everything**, and **download the Excel BOQ** (or Simpro CSV). Nothing the AI finds counts until it's approved. Approving also saves the line colours for that client, so the next set from the same consultant is read the same way without asking the AI.
 
+## Tender documents
+
+Drop the scope of works, specifications, acoustic reports, design briefs, addenda and tender conditions in with the plans (PDF, Word, Excel or text), or add them later from the job page. The app tells documents from drawings by page size: mostly-A4 PDFs are documents. The AI reads each document **before** the drawings, and lists what changes the take-off or the price. Each item quotes the document's own words and page:
+
+| Type | Accepting it… |
+|---|---|
+| Material specified (e.g. acoustic PVC in ceilings) | changes that service's pipe material on its runs, and the autopilot uses it from then on. The price follows through the price mappings. |
+| Exclusion ("by others") | stops that service (or civil category) being taken off, removes its suggestions, and lists it as an exclusion |
+| Allowance (provisional sum, PC item, CCTV, fees…) | adds it to the estimate (or a line to the civil BOQ) |
+| Rate loading (night works, access, rock…) | adds the % you set to labour, materials or both for the services or civil category it names |
+| Inclusion, commercial risk, note | lists it in the Excel export's **Tender notes** sheet |
+
+The AI never invents amounts or percentages: where the document doesn't state one, the item waits for you to enter it. While the drawings are read, the document requirements are passed to the AI too, so the specified materials and scope steer how the plans are read. Everything can be undone, and removing a document undoes what was accepted from it.
+
 ## Civil BOQ
 
 1. **Load previous jobs' rates** (*Civil rates* in the menu): drop in the priced BOQs from past civil jobs, Excel or CSV. Any layout works if it has a header row with *Description* and *Rate* (*Unit* and *Qty* are used too). Section headings become categories.
@@ -284,6 +298,7 @@ backend/app/
   autopilot.py        drop-the-plans-in pipeline (runs in the background)
   autoscale.py        confirms a scale against dimension strings on the sheet
   civil.py            civil BOQ: rate import, merging, pricing from past jobs, export
+  tender.py           tender documents: reading, and applying / undoing their requirements
   revision.py         revision compare
   markup.py           marked-up PDF
   sso.py              Microsoft 365 sign-on

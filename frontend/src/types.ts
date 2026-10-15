@@ -23,6 +23,7 @@ export interface AutopilotStatus {
   attention?: Attention[];
   summary?: Record<string, number>;
   running?: boolean;
+  tender?: { documents: number; requirements: number; suggested: number; accepted: number };
 }
 
 export interface CivilItem { id: number; sheet_id: number | null; sheet: string; description: string; unit: string; qty: number; basis: string; confidence: number }
@@ -34,7 +35,27 @@ export interface CivilLine {
   amount: number; needs_measuring: boolean; status: "suggested" | "confirmed"; source: string; note: string;
   items: CivilItem[];
 }
-export interface CivilSummary { lines: number; lines_suggested: number; lines_confirmed: number; needs_measuring: number; unpriced: number; total_confirmed_ex_gst: number }
+export interface CivilLoading { label: string; percent: number; category: string; amount: number }
+export interface CivilSummary {
+  lines: number; lines_suggested: number; lines_confirmed: number; needs_measuring: number; unpriced: number;
+  lines_total_ex_gst: number; loadings: CivilLoading[]; total_confirmed_ex_gst: number;
+}
+
+export interface TenderDoc {
+  id: number; filename: string; doc_type: string; title: string; summary: string; page_count: number;
+  status: "queued" | "read" | "failed"; error: string; created_at: string; requirements: number; suggested: number;
+}
+export type ReqCategory = "material_spec" | "exclusion" | "inclusion" | "allowance" | "rate_factor" | "risk" | "note";
+export interface Requirement {
+  id: number; document_id: number | null; document: string; category: ReqCategory; title: string; quote: string;
+  page: number | null; service_codes: string[]; civil_category: string; material: string; description: string;
+  qty: number; unit: string; amount: number; allowance_kind: string; percent: number; applies_to: string;
+  confidence: number; status: "suggested" | "accepted" | "rejected"; effect: string; needs: string;
+}
+export interface RequirementList {
+  requirements: Requirement[]; labels: Record<string, string>;
+  excluded_services: string[]; spec_materials: Record<string, string>; loadings: { label: string; percent: number }[];
+}
 export interface CivilBoq { lines: CivilLine[]; summary: CivilSummary; categories: string[]; units: string[] }
 export interface RateSet { id: number; name: string; source_file: string; job_date: string | null; notes: string; active: boolean; created_at: string; rates: number }
 export interface CivilRate { id: number; code: string; category: string; description: string; unit: string; rate: number; qty: number | null }
@@ -170,6 +191,7 @@ export interface Allowance {
 export interface PricingSummary {
   material_cost: number; labour_cost: number; labour_hours: number; allowances_cost: number; cost: number; margin: number;
   sell_ex_gst: number; gst: number; sell_inc_gst: number;
+  loading_cost?: number; loadings?: { label: string; percent: number; applies_to: string; service_codes: string[] }[];
   by_service: { service_code: string; cost: number; sell: number; labour_hours: number }[];
   by_stage: { stage: string; cost: number; sell: number; labour_hours: number }[];
   reference_total_ex_gst?: number; reference_variance_pct?: number | null;

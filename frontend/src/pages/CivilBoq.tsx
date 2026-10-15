@@ -179,6 +179,12 @@ export default function CivilBoqView({ jobId, final, sheets }: { jobId: number; 
               </Fragment>
             ))}
             {boq.lines.length === 0 && <tr><td colSpan={8} className="muted">No quantities yet.</td></tr>}
+            {s.loadings.map((ld, i) => (
+              <tr key={`ld${i}`} className="loading">
+                <td></td><td colSpan={4}>{ld.label}: +{ld.percent}% on {ld.category || "all approved lines"} <span className="muted small">(from the tender documents)</span></td>
+                <td className="r">{money(ld.amount)}</td><td colSpan={2}></td>
+              </tr>
+            ))}
             <tr className="total"><td></td><td colSpan={4}>Approved total (ex GST)</td><td className="r">{money(s.total_confirmed_ex_gst)}</td><td colSpan={2}></td></tr>
           </tbody>
         </table>

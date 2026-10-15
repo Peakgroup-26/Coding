@@ -244,3 +244,17 @@ table.boq input.num { text-align: right; width: 100px; }
 .chip { display: inline-block; margin: 1px 3px 1px 0; padding: 1px 6px; border: 1px solid var(--line); border-radius: 8px; font-size: 11px; }
 .add-line { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--line); }
 table.inner { background: #fafbfd; }
+
+/* --- Tender documents --- */
+.tender .doc-list { list-style: none; padding: 0; margin: 10px 0; }
+.tender .doc-list li { padding: 6px 0; border-bottom: 1px solid var(--line); }
+.tender .doc-list li .link { padding: 0; font-weight: 600; }
+.req-group h4 { margin: 14px 0 6px; font-size: 14px; }
+.req { display: flex; gap: 12px; align-items: flex-start; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; background: #fffdf5; }
+.req.needs { border-color: #f0c879; background: #fff7e6; }
+.req.accepted { background: #f3fbf5; border-color: #a9dcb9; }
+.req.rejected { opacity: .6; background: #fafafa; }
+.req-main { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+.req blockquote { margin: 0; padding-left: 10px; border-left: 3px solid var(--line); font-style: italic; color: #3b4555; }
+.req-actions { display: flex; flex-direction: column; gap: 6px; }
+table.boq tr.loading td { background: #f4f0ff; }

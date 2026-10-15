@@ -108,6 +108,12 @@ def _run(job_id: int, user_id: int, reread: bool) -> None:
             if f.status == "failed":
                 p.attention("file", f"{f.filename}: {f.error}")
         reader = get_reader()
+        # Tender documents first, so what they say can steer the reading of the drawings.
+        from .tender import context_for, read_documents
+
+        read_documents(db, job, user, p, reader)
+        if reader is not None:
+            reader.context = context_for(db, job.id)
         if job.kind == "civil":
             from .civil import run_civil
 
@@ -176,7 +182,7 @@ def _run_hydraulic(db: Session, job: Job, user: User, p: Progress, reader, rerea
                                    "Trace them by hand on the sheet.", sheet)
         tags = (sheet.ai_reading or {}).get("count_tags") or []
         if tags:
-            count_tagged_items(db, sheet, tags, user)
+            count_tagged_items(db, sheet, tags, user, excluded=set(job.excluded_services or []))
         db.commit()
     p.status["summary"] = summary(db, job.id)
 
@@ -236,6 +242,14 @@ def _suggest_runs(db: Session, job: Job, sheet: Sheet, user: User, p: Progress, 
     if not assigns:
         p.attention("styles", "Couldn't tell which line colours are which pipes. Open the sheet's AI assist and pick them once; "
                               "the app remembers them for this client.", sheet)
+        return
+    # Accepted tender requirements: excluded services aren't taken off, and specified materials win.
+    codes = {s.id: s.code for s in db.scalars(select(Service))}
+    excluded = set(job.excluded_services or [])
+    spec = job.spec_materials or {}
+    assigns = [{**a, "material": spec.get(codes.get(a["service_id"]), a["material"])}
+               for a in assigns if codes.get(a["service_id"]) not in excluded]
+    if not assigns:
         return
     # Remember what the AI decided only once a person approves it (approve_all saves the mappings).
     create_suggested_runs(db, sheet, assigns, user, client=client, remember=False)

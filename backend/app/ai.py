@@ -70,6 +70,34 @@ class CivilGroup:
 
 
 @dataclass
+class TenderItem:
+    category: str  # material_spec | exclusion | inclusion | allowance | rate_factor | risk | note
+    title: str
+    quote: str
+    page: int = 0
+    service_codes: list[str] = field(default_factory=list)
+    civil_category: str = ""
+    material: str = ""
+    description: str = ""
+    qty: float = 0.0
+    unit: str = ""
+    amount: float = 0.0
+    allowance_kind: str = ""
+    percent: float = 0.0
+    applies_to: str = ""
+    confidence: float = 0.0
+
+
+@dataclass
+class TenderReading:
+    doc_type: str = "other"
+    title: str = ""
+    summary: str = ""
+    items: list[TenderItem] = field(default_factory=list)
+    model: str = ""
+
+
+@dataclass
 class SheetReading:
     sheet_no: str = ""
     title: str = ""
@@ -98,6 +126,9 @@ class SheetReader(Protocol):
     # read_civil_sheet(page_png, page_text, categories) -> CivilReading
     # consolidate_civil(items) -> list[CivilGroup]
     # match_civil_rates(lines) -> {line_id: (rate_ids, reason)}
+    # read_tender_doc(text, pdf, job_kind, service_codes, materials, categories) -> TenderReading
+    # A reader may also have a `context` attribute: a summary of the job's tender documents that the
+    # autopilot sets so the drawing reads take the specification into account.
 
 
 def _schema(service_codes: list[str], count_types: list[str]) -> dict:
@@ -240,6 +271,42 @@ def _match_schema() -> dict:
     }
 
 
+def _tender_schema(service_codes: list[str], categories: list[str]) -> dict:
+    return {
+        "type": "object",
+        "properties": {
+            "doc_type": {"type": "string", "enum": TENDER_DOC_TYPES},
+            "title": {"type": "string"},
+            "summary": {"type": "string", "description": "Two to four sentences on what this document means for Peak's price."},
+            "items": {"type": "array", "items": {
+                "type": "object",
+                "properties": {
+                    "category": {"type": "string", "enum": TENDER_CATEGORIES},
+                    "title": {"type": "string", "description": "A short label, e.g. 'Acoustic drainage pipe in ceilings'"},
+                    "quote": {"type": "string"},
+                    "page": {"type": "integer"},
+                    "service_codes": {"type": "array", "items": {"type": "string", "enum": service_codes}},
+                    "civil_category": {"type": "string", "enum": [""] + categories},
+                    "material": {"type": "string"},
+                    "description": {"type": "string", "description": "What to take off or price, in estimator's words"},
+                    "qty": {"type": "number"},
+                    "unit": {"type": "string", "enum": ["", "m", "m2", "m3", "ea", "t", "item"]},
+                    "amount": {"type": "number"},
+                    "allowance_kind": {"type": "string", "enum": ["", "pc", "provisional", "item"]},
+                    "percent": {"type": "number"},
+                    "applies_to": {"type": "string", "enum": ["", "labour", "material", "all"]},
+                    "confidence": {"type": "number", "description": "0 to 1"},
+                },
+                "required": ["category", "title", "quote", "page", "service_codes", "civil_category", "material", "description",
+                             "qty", "unit", "amount", "allowance_kind", "percent", "applies_to", "confidence"],
+                "additionalProperties": False,
+            }},
+        },
+        "required": ["doc_type", "title", "summary", "items"],
+        "additionalProperties": False,
+    }
+
+
 PROMPT = """This is one sheet from a set of construction drawings that a commercial plumbing estimator in \
 Queensland, Australia is pricing. Read it and fill in the fields.
 
@@ -315,6 +382,40 @@ is a fair match.
 Lines:
 {lines}"""
 
+TENDER_CATEGORIES = ["material_spec", "exclusion", "inclusion", "allowance", "rate_factor", "risk", "note"]
+TENDER_DOC_TYPES = ["scope", "specification", "acoustic_report", "brief", "addendum", "tender_conditions",
+                    "schedule_of_rates", "geotechnical_report", "other"]
+
+TENDER_PROMPT = """You are helping an estimator at Peak Plumbing & Gas Services (Queensland, Australia) price a \
+{trade} tender. This is one of the tender documents (scope of works, specification, acoustic report, design \
+brief, addendum, tender conditions and so on). List everything in it that changes what Peak must take off or \
+how it should be priced.
+
+Categories:
+- material_spec: a material, product or pipe class required for a service (e.g. acoustic PVC or cast iron \
+for drainage in ceilings over bedrooms; copper not PEX; Class 3 RCP). Give the service code(s) and the material.
+- exclusion: work Peak's trade is not to price ("by others", "excluded", "nominated subcontractor").
+- inclusion: work that is explicitly in Peak's scope and easy to miss.
+- allowance: an extra item to price that isn't drawn: lagging, CCTV of drains, authority fees, testing, \
+commissioning, a provisional sum or PC item. Give the amount only if the document states it.
+- rate_factor: a site or programme condition that makes the work cost more (night or out-of-hours work, \
+staging, restricted access, working at heights, rock, live services, remote site). Give a percent only if \
+the document states one; otherwise 0, and the estimator sets it.
+- risk: commercial terms that affect the price or risk (liquidated damages, retention, warranty, payment terms).
+- note: anything else the estimator should know when pricing.
+
+Rules:
+- quote is the document's own sentence, word for word. page is the page it's on (0 if unknown).
+- Never invent amounts, percents or quantities. Use 0 when the document doesn't state one.
+- Service codes: {services}. Use them for service_codes; leave it empty if no service applies.
+- Known materials: {materials}. Use one of these if it fits; otherwise name the material as the document does.
+- Civil categories (for civil items only): {categories}.
+- Skip boilerplate that doesn't affect cost or scope.
+
+<document>
+{text}
+</document>"""
+
 MAX_IMAGE_PX = 2000  # long side sent to the model; title blocks stay legible at this size
 
 
@@ -336,6 +437,7 @@ class ClaudeSheetReader:
     AI steps: naming line styles, reading civil drawings and matching civil rates."""
 
     name = "claude"
+    context = ""  # the job's tender requirements, set by the autopilot
 
     def __init__(self, model: str | None = None):
         import anthropic
@@ -343,6 +445,13 @@ class ClaudeSheetReader:
         self.anthropic = anthropic
         self.client = anthropic.Anthropic()
         self.model = model or os.environ.get("TAKEOFF_AI_MODEL", "claude-opus-5-5")
+
+    def _with_context(self, prompt: str) -> str:
+        if not self.context:
+            return prompt
+        return (prompt + "\n\nThe tender documents for this job say the following. Take it into account (for example, "
+                "use the specified materials), but read quantities only from the drawing.\n<tender_requirements>\n"
+                + self.context[:20000] + "\n</tender_requirements>")
 
     def _call(self, content: list, schema: dict, effort: str = "low", max_tokens: int = 16000) -> tuple[dict, str]:
         try:
@@ -381,8 +490,8 @@ class ClaudeSheetReader:
     def read_sheet(self, page_png, page_text, service_codes, count_types):
         data, model = self._call([
             self._image(page_png),
-            {"type": "text", "text": PROMPT.format(services=", ".join(service_codes), counts=", ".join(count_types),
-                                                   text=(page_text or "")[:12000])},
+            {"type": "text", "text": self._with_context(PROMPT.format(services=", ".join(service_codes), counts=", ".join(count_types),
+                                                                      text=(page_text or "")[:12000]))},
         ], _schema(service_codes, count_types))
         return SheetReading(
             sheet_no=data["sheet_no"].strip(), title=data["title"].strip(), revision=data["revision"].strip(),
@@ -397,9 +506,9 @@ class ClaudeSheetReader:
     def map_styles(self, page_png, legend, styles, service_codes, materials):
         data, _ = self._call([
             self._image(page_png),
-            {"type": "text", "text": STYLE_PROMPT.format(
+            {"type": "text", "text": self._with_context(STYLE_PROMPT.format(
                 services=", ".join(service_codes), materials=", ".join(materials),
-                legend=json.dumps(legend, indent=1), styles=json.dumps(styles, indent=1))},
+                legend=json.dumps(legend, indent=1), styles=json.dumps(styles, indent=1)))},
         ], _style_schema([s["key"] for s in styles], service_codes, materials))
         out = []
         for a in data["assignments"]:
@@ -411,7 +520,7 @@ class ClaudeSheetReader:
     def read_civil_sheet(self, page_png, page_text, categories):
         data, model = self._call([
             self._image(page_png),
-            {"type": "text", "text": CIVIL_PROMPT.format(categories=", ".join(categories), text=(page_text or "")[:30000])},
+            {"type": "text", "text": self._with_context(CIVIL_PROMPT.format(categories=", ".join(categories), text=(page_text or "")[:30000]))},
         ], _civil_schema(categories), effort="medium")
         return CivilReading(
             sheet_no=data["sheet_no"].strip(), title=data["title"].strip(), revision=data["revision"].strip(),
@@ -427,9 +536,29 @@ class ClaudeSheetReader:
         return [CivilGroup(**g) for g in data["groups"]]
 
     def match_civil_rates(self, lines):
-        data, _ = self._call([{"type": "text", "text": MATCH_PROMPT.format(lines=json.dumps(lines, indent=1))}],
+        data, _ = self._call([{"type": "text", "text": self._with_context(MATCH_PROMPT.format(lines=json.dumps(lines, indent=1)))}],
                              _match_schema())
         return {m["line_id"]: (m["rate_ids"], m["reason"]) for m in data["matches"]}
+
+    def read_tender_doc(self, text, pdf, job_kind, service_codes, materials, categories):
+        """Read one tender document: its text, or (for a scanned PDF with no text) the PDF itself."""
+        prompt = TENDER_PROMPT.format(trade="civil" if job_kind == "civil" else "hydraulic services",
+                                      services=", ".join(service_codes), materials=", ".join(materials),
+                                      categories=", ".join(categories), text=text or "(the document is attached as a PDF)")
+        content = []
+        if pdf is not None:
+            content.append({"type": "document", "source": {"type": "base64", "media_type": "application/pdf",
+                                                           "data": base64.standard_b64encode(pdf).decode()}})
+        content.append({"type": "text", "text": prompt})
+        data, model = self._call(content, _tender_schema(service_codes, categories), effort="medium")
+        items = []
+        for i in data["items"]:
+            items.append(TenderItem(**{**i, "service_codes": [c for c in i["service_codes"] if c in service_codes],
+                                       "page": max(0, int(i["page"])), "qty": max(0.0, float(i["qty"])),
+                                       "amount": max(0.0, float(i["amount"])), "percent": max(0.0, float(i["percent"])),
+                                       "confidence": max(0.0, min(1.0, float(i["confidence"])))}))
+        return TenderReading(doc_type=data["doc_type"], title=data["title"].strip(), summary=data["summary"].strip(),
+                             items=items, model=model)
 
 
 _override: SheetReader | None = None

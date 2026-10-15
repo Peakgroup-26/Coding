@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { api, download, upload } from "../api";
 import type { AutopilotStatus, Job, Sheet } from "../types";
 import CivilBoqView from "./CivilBoq";
+import TenderDocs from "./TenderDocs";
 
 const fmt = (n: number | undefined, dp = 0) => (n ?? 0).toLocaleString("en-AU", { maximumFractionDigits: dp, minimumFractionDigits: dp });
 
@@ -73,6 +74,7 @@ export default function JobOverview() {
   const [msg, setMsg] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [changes, setChanges] = useState(0); // bumps when tender requirements change what's shown
   const timer = useRef<ReturnType<typeof setTimeout>>();
   const alive = useRef(true);
 
@@ -162,6 +164,8 @@ export default function JobOverview() {
           </div>
 
           <NeedsYou items={st.attention} />
+          <TenderDocs jobId={jobId} civil={false} final={job.status === "final"} running={running}
+                      onChanged={() => { setChanges((c) => c + 1); poll(); }} />
 
           <section className="card actions">
             <h2>Next steps</h2>
@@ -203,7 +207,9 @@ export default function JobOverview() {
       {!running && civil && (
         <>
           <NeedsYou items={st.attention} />
-          <CivilBoqView jobId={jobId} final={job.status === "final"} sheets={sheets} />
+          <TenderDocs jobId={jobId} civil final={job.status === "final"} running={running}
+                      onChanged={() => { setChanges((c) => c + 1); poll(); }} />
+          <CivilBoqView key={changes} jobId={jobId} final={job.status === "final"} sheets={sheets} />
         </>
       )}
 

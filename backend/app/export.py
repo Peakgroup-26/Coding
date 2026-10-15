@@ -140,6 +140,12 @@ def build_workbook(db: Session, job_id: int) -> bytes:
     if job.price_book_version_id:
         _pricing_sheet(wb, db, job)
 
+    from .tender import notes_rows
+
+    notes = notes_rows(db, job_id)
+    if notes:
+        _sheet(wb, "Tender notes", ["Type", "Item", "What the document says", "Document", "Status"], notes)
+
     reg = []
     for s in sorted(sheets.values(), key=lambda s: (s.sheet_no or "~", s.revision)):
         reg.append([s.sheet_no, s.title, s.revision, s.page_size, s.stated_scale,

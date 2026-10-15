@@ -175,3 +175,17 @@ These are choices made where the brief left room, as it asks. Each one can be re
 71. **The autopilot runs in background threads in the app process** (`AUTOPILOT_WORKERS`, default 2). This suits one server. If the server restarts mid-read, the job shows *interrupted* with a button to carry on. A blank API key turns the AI off rather than failing the read, and one sheet the AI can't read doesn't stop the rest.
 
 72. **Deployment on Plesk:** the app container listens on `127.0.0.1` only, and Plesk's nginx forwards the subdomain to it over HTTPS (Let's Encrypt). Docker is installed from Docker's own apt repository if Plesk hasn't already installed it. Backups (database, drawings, settings) run nightly to `/var/backups/peak-takeoff` and are kept for 14 days. They should also be copied off the server.
+
+## Tender documents
+
+73. **Documents are told from drawings by page size.** A PDF whose first pages are mostly A4 (or smaller) is a document; anything else is a drawing set. Word, Excel and text files are always documents. A drawing set issued at A4 would be read as a document. It can be removed and re-added as plans, but that's rare in commercial hydraulic work.
+
+74. **Requirements are typed so each has a defined, reversible effect.** There are seven types: material spec, exclusion, inclusion, allowance, rate loading, risk and note. Accepting one makes a specific change and records exactly what changed, so *Undo* (and removing the document) can reverse it. Free-text advice with no defined effect would have no traceability.
+
+75. **The AI never sets money or percentages.** Amounts are only taken when the document states them (e.g. a provisional sum). Loadings for night works, access, rock and so on wait for the estimator to enter the %. Only then can they be accepted. This keeps Peak's commercial judgement with Peak.
+
+76. **Loadings are explicit, not hidden in rates.** In hydraulic pricing a loading raises the labour and/or material cost of the services it names. The pricing tab shows the total loading and what it came from. In a civil BOQ each loading is a separate line under the subtotal, on the approved lines of its category.
+
+77. **Specified materials override what the drawing reading says,** for that service, on this job only. Existing runs are changed when the requirement is accepted, and new runs from later reads use it automatically. A material the price book doesn't know yet is created (waste 0%) so it can be mapped; until it's mapped, pricing lists it as unmapped rather than guessing a price.
+
+78. **Long documents are read in parts** (about 150,000 characters each, split at page breaks), and duplicate items across parts are merged. Scanned PDFs with no text are sent to the AI as PDFs (up to 30 MB). The document text is kept so it can be re-read later without the original.

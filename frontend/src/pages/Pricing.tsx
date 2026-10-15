@@ -66,6 +66,12 @@ export function PricingTab({ jobId, locked, onJobChange }: { jobId: number; lock
             <Stat label="GST" v={fmtMoney(s.gst)} />
             <Stat label="Total inc GST" v={fmtMoney(s.sell_inc_gst)} strong />
           </div>
+          {!!s.loadings?.length && (
+            <p className="small">
+              Includes {fmtMoney(s.loading_cost ?? 0)} of loadings from the tender documents:{" "}
+              {s.loadings.map((l) => `${l.label} +${l.percent}% ${l.applies_to}${l.service_codes.length ? ` (${l.service_codes.join(", ")})` : ""}`).join("; ")}.
+            </p>
+          )}
           {s.reference_total_ex_gst !== undefined && (
             <p className={Math.abs(s.reference_variance_pct ?? 0) <= 1 ? "ok" : "warn"}>
               Known estimate {fmtMoney(s.reference_total_ex_gst)} ex GST: this pricing is {s.reference_variance_pct}% {(s.reference_variance_pct ?? 0) >= 0 ? "above" : "below"} it.
