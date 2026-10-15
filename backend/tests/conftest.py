@@ -9,6 +9,7 @@ os.environ["DATABASE_URL"] = os.environ.get("TEST_DATABASE_URL") or f"sqlite:///
 os.environ["SECRET_KEY"] = "test-secret"
 os.environ["ADMIN_EMAIL"] = "admin@test.local"
 os.environ["ADMIN_PASSWORD"] = "admin-password"
+os.environ["AUTOPILOT_SYNC"] = "1"
 
 import pymupdf as fitz  # noqa: E402
 import pytest  # noqa: E402

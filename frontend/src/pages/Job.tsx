@@ -40,6 +40,7 @@ export default function JobPage() {
 
   return (
     <main className="page">
+      <Link to={`/jobs/${job.id}`}>← Overview</Link>
       <div className="row">
         <div>
           <h1>{job.name} {final && <span className="badge ok">Final</span>}</h1>

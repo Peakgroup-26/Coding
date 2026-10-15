@@ -155,3 +155,81 @@ These are choices made where the brief left room, as it asks. Each one can be re
 62. **CI** runs lint (pyflakes), then the backend tests on SQLite and on PostgreSQL 16, then the frontend typecheck and build.
 
 63. **The Docker image** builds the frontend in a Node stage and runs on `python:3.12-slim` as a non-root user. It has a health check and trusts proxy headers, so HTTPS termination in front gives correct redirect URLs for sign-on. The compose file is for a single server or a trial. A larger deployment would use managed PostgreSQL (e.g. RDS in Sydney) and S3.
+
+## Autopilot and civil BOQ
+
+64. **"Fully AI driven" still keeps the sign-off.** The brief's non-negotiable 2 (a person signs off AI suggestions) stays. The autopilot does all the reading, scaling, tracing and counting, but its work arrives as suggestions behind one *Approve everything* button. One click is the least sign-off there can be while a person still owns the numbers.
+
+65. **Automatic scale confirmation uses the drawing's own dimensions.** The second dimension the brief requires is a dimension string on the sheet (e.g. "3600") beside a parallel line whose length matches at the stated scale. Two matches within 1% confirm it. Any dimension within 10% but outside 1% counts as a disagreement and blocks it (non-negotiable 3). A sheet it can't confirm is never measured; it goes on the "Needs you" list.
+
+66. **The AI names line styles; the app measures them.** The AI only says which colour, dash or layer is which service, DN and material, and only assignments it rates at 0.5 confidence or above are used. The lengths come from the PDF's vector geometry at the verified scale, never from the AI. Styles are only saved as the client's mapping once their runs are approved.
+
+67. **Counts come from text tags, not from the AI pointing at the drawing.** Vision models aren't reliable at giving positions. The AI says which tag means which item (FW = floor waste); the app finds every tag in the PDF's text layer and places a count there. Tags in a legend line or the title block are skipped. Symbol-only items are still counted with *click one, find the rest* (Phase 4).
+
+68. **Civil quantities are read, never estimated.** The AI lists only quantities written on the sheet (schedules, long sections, labels) and says where each came from. The AI groups duplicates across sheets and says whether to count once or add up; the app does the arithmetic. A group mixing units is rejected.
+
+69. **Civil rates are the median of the matching past rates,** with each source job listed. Without AI the match is on wording (shared words, the same unit, and the same sizes). With AI, the model picks from the eight best wording matches, so it can't pick a rate that isn't in Peak's history.
+
+70. **Re-reading never overwrites approved civil quantities.** New readings attach to the approved line (same unit, similar wording), and a change adds a note for a person to act on.
+
+71. **The autopilot runs in background threads in the app process** (`AUTOPILOT_WORKERS`, default 2). This suits one server. If the server restarts mid-read, the job shows *interrupted* with a button to carry on. A blank API key turns the AI off rather than failing the read, and one sheet the AI can't read doesn't stop the rest.
+
+72. **Deployment on Plesk:** the app container listens on `127.0.0.1` only, and Plesk's nginx forwards the subdomain to it over HTTPS (Let's Encrypt). Docker is installed from Docker's own apt repository if Plesk hasn't already installed it. Backups (database, drawings, settings) run nightly to `/var/backups/peak-takeoff` and are kept for 14 days. They should also be copied off the server.
+
+## Tender documents
+
+73. **Documents are told from drawings by page size.** A PDF whose first pages are mostly A4 (or smaller) is a document; anything else is a drawing set. Word, Excel and text files are always documents. A drawing set issued at A4 would be read as a document. It can be removed and re-added as plans, but that's rare in commercial hydraulic work.
+
+74. **Requirements are typed so each has a defined, reversible effect.** There are seven types: material spec, exclusion, inclusion, allowance, rate loading, risk and note. Accepting one makes a specific change and records exactly what changed, so *Undo* (and removing the document) can reverse it. Free-text advice with no defined effect would have no traceability.
+
+75. **The AI never sets money or percentages.** Amounts are only taken when the document states them (e.g. a provisional sum). Loadings for night works, access, rock and so on wait for the estimator to enter the %. Only then can they be accepted. This keeps Peak's commercial judgement with Peak.
+
+76. **Loadings are explicit, not hidden in rates.** In hydraulic pricing a loading raises the labour and/or material cost of the services it names. The pricing tab shows the total loading and what it came from. In a civil BOQ each loading is a separate line under the subtotal, on the approved lines of its category.
+
+77. **Specified materials override what the drawing reading says,** for that service, on this job only. Existing runs are changed when the requirement is accepted, and new runs from later reads use it automatically. A material the price book doesn't know yet is created (waste 0%) so it can be mapped; until it's mapped, pricing lists it as unmapped rather than guessing a price.
+
+78. **Long documents are read in parts** (about 150,000 characters each, split at page breaks), and duplicate items across parts are merged. Scanned PDFs with no text are sent to the AI as PDFs (up to 30 MB). The document text is kept so it can be re-read later without the original.
+
+## Permissions, chat and memory
+
+79. **Permissions are enforced once, centrally.** Every router runs `access.enforce`. It finds the job behind any id in the URL (job, sheet, run, count, line, document, requirement, allowance, level, flag, viewport, generated item) and answers 404 if the person can't see it, so a new route can't forget the check. Areas without a job (the past-rates library, pricing edits) are checked by path. The job list is filtered the same way. Five permissions cover what was asked. Roles (estimator, reviewer, admin) keep their meaning for sign-off.
+
+80. **"Everyone's jobs" covers previous tenders.** With it off, a person sees only the jobs they started. Jobs made before this change have no recorded starter, so only people with "Everyone's jobs" (and admins) see them.
+
+81. **People without the past-rates permission still get civil lines priced from history.** The rate is shown, but which previous jobs it came from is hidden. Otherwise the permission would stop them pricing at all.
+
+82. **The chat acts through tools, not free text.** About 25 tools wrap the same functions as the buttons. Each change is audited under the person chatting. Changing tools refuse while the job is final or while the autopilot is reading it. Bulk changes over 20 items need the person's confirmation. Approvals only happen when asked, and AI-created items stay suggestions, so the brief's sign-off rule still holds.
+
+83. **The conversation history is append-only,** as the current Claude API requires for its thinking blocks. The system prompt (instructions, job, memories) and the tool list are fixed when a session starts. The job's live state goes into each new user message instead. Messages are stored and replayed exactly as received. A long conversation (about 100k tokens) is summarised into a fresh session. As a safety net, a history that somehow fails the check drops the stale thinking (`drop_block`) rather than failing the message. One conversation per job is shared, and a per-job lock stops two people's messages interleaving.
+
+84. **Memory is plain sentences people can read and edit,** scoped to company, client or job. The AI decides when to save one (preferences, rules, corrections), and admins can edit, switch off or add their own. Memories feed both the chat and the autopilot's reads.
+
+85. **Speech uses the browser's built-in recognition** rather than another cloud service, because the Claude API doesn't transcribe audio. It needs HTTPS (the Plesk setup has it) and works in Chrome, Edge and Safari. Chrome and Edge send the audio to Google or Microsoft for recognition. Replies can be read aloud with the browser's speech synthesis, which runs on the device.
+
+## Reports
+
+86. **Labour hours are never invented.** The price book's prebuild labour (through the same mappings as pricing) comes first, then Peak's productivity rates, where the most specific match wins. Anything with neither shows as "no labour rate" and counts toward a visible "missing" total, so a short program is never silently short.
+
+87. **Crew settings are admin settings, not built-in rules.** The defaults (8 h days, 0.5 apprentices per plumber at 50% output, one supervisor per 6 from a crew of 4, PM 10% of field hours) are starting points to change. Apprentices are whole people, never more than the ratio allows.
+
+88. **The program is sequential by stage, in the stage order Peak set.** With a target duration, the crew is the smallest one that gets every stage done in whole days within the target. Builders' programs rarely run that neatly, so any stage's crew or start date can be overridden. The calendar skips weekends, QLD public holidays (Easter computed, Monday substitutes for Christmas and New Year) and the Christmas shutdown.
+
+89. **Material quantities include the waste allowance** and pipe is rounded up to whole stock lengths per material (an admin setting). Fittings come from the fitting rules. With "include items not approved yet" off (the default), only approved quantities count.
+
+90. **Cash flow spreads each stage's sell value evenly over its working days.** That's simple and explainable, good for forecasting progress claims, not a contract claim schedule.
+
+91. **The workforce forecast adds up people per week across won jobs that have a start date** (optionally pending ones too) and compares that with Peak's headcount setting. It's a capacity check, not a roster.
+
+92. **No dual-axis charts.** The cash-flow chart shows monthly value, and the running total is in the table and tooltips instead of on a second axis. Chart colours use a validated colour-blind-safe order, and every chart has a legend and a table next to it.
+
+## Sectors and sales
+
+93. **The sector is a field on every job, not a separate system.** Residential, commercial and maintenance jobs use the same take-off, AI, reports and chat. The sector decides which tab a job is in, its quote-number prefix, who can see it (per-person sector access) and which sales figures it counts in. Jobs that existed before this change are filed as commercial.
+
+94. **A lead is a job with no plans yet,** so nothing has to be copied when the plans arrive. You drop them on the lead.
+
+95. **The pipeline stage is worked out, not stored.** Won, lost or withdrawn comes from the result. Otherwise, a sent date means quote sent; plans, an autopilot run or BOQ lines mean quoting; anything else is a lead. It can't drift from what has actually happened. The dates fill in when the event is recorded and can be corrected. The app refuses a quote dated before its lead, or a result dated before its quote.
+
+96. **Conversion is measured by cohort** (the leads that came in during the period and what became of them), so a period isn't flattered by wins from older leads. The win rate of quotes decided in the period is shown separately. Times are reported as average and median, because one slow job skews the average.
+
+97. **Sales details are picked from lists, not typed,** so the dashboard can group them: type of work per sector, rough size bands, lead source, lost reason. Lists are edited by an admin; a value no longer on a list stays on old jobs and still shows. Client and contact are drop-downs of the ones already used, plus "new". The real quote price is still typed: a band isn't a price.

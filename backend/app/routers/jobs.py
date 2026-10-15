@@ -6,6 +6,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .. import config, storage
+from ..access import can_kind, can_sector, can_see_job
+from ..sales import prepare_new
 from ..audit import record, snapshot
 from ..auth import current_user
 from ..db import get_db
@@ -20,13 +22,20 @@ router = APIRouter(prefix="/api", tags=["jobs"])
 
 
 @router.get("/jobs", response_model=list[JobOut])
-def list_jobs(db: Session = Depends(get_db), _: User = Depends(current_user)):
-    return db.scalars(select(Job).order_by(Job.id.desc())).all()
+def list_jobs(kind: str = "", sector: str = "", db: Session = Depends(get_db), user: User = Depends(current_user)):
+    """The jobs this user may see, newest first. kind (hydraulic / civil) and sector narrow it."""
+    jobs = [j for j in db.scalars(select(Job).order_by(Job.id.desc())) if can_see_job(user, j)]
+    return [j for j in jobs if (not kind or (j.kind or "hydraulic") == kind) and (not sector or j.sector == sector)]
 
 
 @router.post("/jobs", response_model=JobOut)
 def create_job(body: JobIn, db: Session = Depends(get_db), user: User = Depends(current_user)):
-    job = Job(**body.model_dump())
+    if not can_kind(user, body.kind):
+        raise HTTPException(403, f"You don't have access to {body.kind} jobs")
+    if not can_sector(user, body.sector):
+        raise HTTPException(403, f"You don't have access to {body.sector} jobs")
+    job = Job(**body.model_dump(), created_by=user.id)
+    prepare_new(db, job)
     db.add(job)
     db.flush()
     record(db, user.id, "job", job.id, "create", after=snapshot(job))
@@ -59,6 +68,33 @@ def list_files(job_id: int, db: Session = Depends(get_db), _: User = Depends(cur
     return db.scalars(select(DrawingFile).where(DrawingFile.job_id == job_id).order_by(DrawingFile.id)).all()
 
 
+async def store_upload(db: Session, job: Job, up: UploadFile, user: User, status: str = "processing") -> DrawingFile:
+    """Save one uploaded PDF privately and record it. The caller splits it into sheets."""
+    name = up.filename or "drawing.pdf"
+    if not name.lower().endswith(".pdf"):
+        raise HTTPException(422, f"{name} is not a PDF")
+    safe = re.sub(r"[^A-Za-z0-9._-]", "_", name)[-120:]
+    key = f"jobs/{job.id}/originals/{uuid.uuid4().hex}-{safe}"
+    size = 0
+    with open(storage.writable_path(key), "wb") as out:
+        while chunk := await up.read(1024 * 1024):
+            size += len(chunk)
+            if size > config.MAX_UPLOAD_BYTES:
+                out.close()
+                storage.writable_path(key).unlink(missing_ok=True)
+                raise HTTPException(413, f"{name} is larger than {config.MAX_UPLOAD_BYTES // (1024 * 1024)} MB")
+            out.write(chunk)
+    with open(storage.writable_path(key), "rb") as f:
+        if f.read(5) != b"%PDF-":
+            storage.writable_path(key).unlink(missing_ok=True)
+            raise HTTPException(422, f"{name} is not a valid PDF")
+    storage.commit(key)
+    drawing = DrawingFile(job_id=job.id, filename=name, storage_key=key, uploaded_by=user.id, status=status)
+    db.add(drawing)
+    db.flush()
+    return drawing
+
+
 @router.post("/jobs/{job_id}/files", response_model=list[SheetOut])
 async def upload_files(
     job_id: int,
@@ -71,28 +107,7 @@ async def upload_files(
     ensure_open(db, job.id)
     created = []
     for up in files:
-        name = up.filename or "drawing.pdf"
-        if not name.lower().endswith(".pdf"):
-            raise HTTPException(422, f"{name} is not a PDF")
-        safe = re.sub(r"[^A-Za-z0-9._-]", "_", name)[-120:]
-        key = f"jobs/{job.id}/originals/{uuid.uuid4().hex}-{safe}"
-        size = 0
-        with open(storage.writable_path(key), "wb") as out:
-            while chunk := await up.read(1024 * 1024):
-                size += len(chunk)
-                if size > config.MAX_UPLOAD_BYTES:
-                    out.close()
-                    storage.writable_path(key).unlink(missing_ok=True)
-                    raise HTTPException(413, f"{name} is larger than {config.MAX_UPLOAD_BYTES // (1024 * 1024)} MB")
-                out.write(chunk)
-        with open(storage.writable_path(key), "rb") as f:
-            if f.read(5) != b"%PDF-":
-                storage.writable_path(key).unlink(missing_ok=True)
-                raise HTTPException(422, f"{name} is not a valid PDF")
-        storage.commit(key)
-        drawing = DrawingFile(job_id=job.id, filename=name, storage_key=key, uploaded_by=user.id)
-        db.add(drawing)
-        db.flush()
+        drawing = await store_upload(db, job, up, user)
         created.extend(process_file(db, drawing))
         if drawing.status == "failed":
             raise HTTPException(422, drawing.error)

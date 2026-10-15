@@ -97,17 +97,18 @@ class Source:
     catalogue_code: str = ""  # a rule's output item, when set
 
 
-def collect_sources(db: Session, job_id: int) -> list[Source]:
-    """Confirmed quantities on current sheets, grouped by what they are and their stage."""
+def collect_sources(db: Session, job_id: int, include_suggested: bool = False) -> list[Source]:
+    """Confirmed quantities on current sheets (plus suggestions if asked), grouped by what they are and their stage."""
+    ok = ("confirmed", "suggested") if include_suggested else ("confirmed",)
     current = set(db.scalars(select(Sheet.id).where(Sheet.job_id == job_id, Sheet.is_current.is_(True))))
     pipes: dict[tuple, Decimal] = defaultdict(Decimal)
     for r in db.scalars(select(Run).where(Run.job_id == job_id)):
-        if r.sheet_id in current and r.status == "confirmed":
+        if r.sheet_id in current and r.status in ok:
             total = d2(r.length_m) + d2(r.vertical_m) + run_waste_m(r)
             pipes[(r.service_id, r.material, r.dn, r.stage_id)] += total
     counts: dict[tuple, int] = defaultdict(int)
     for c in db.scalars(select(CountItem).where(CountItem.job_id == job_id)):
-        if c.sheet_id in current and c.status == "confirmed":
+        if c.sheet_id in current and c.status in ok:
             counts[(c.service_id, c.item_type, c.stage_id)] += 1
     catalogue = {c.id: c.code for c in db.scalars(select(CatalogueItem))}
     fittings: dict[tuple, Decimal] = defaultdict(Decimal)
@@ -156,6 +157,27 @@ def sell_price(cost: Decimal, pct: Decimal, basis: str) -> Decimal:
     return money(cost * (1 + pct / 100))
 
 
+def loading_for(job: Job, svc_code: str) -> tuple[Decimal, Decimal, list[str]]:
+    """% loadings from accepted tender requirements (night works, access and so on) for a service.
+
+    Returns (material %, labour %, labels). Loadings add up; each applies to the services it names,
+    or every service if it names none.
+    """
+    mat, lab, labels = Decimal(0), Decimal(0), []
+    for a in job.rate_adjustments or []:
+        codes = a.get("service_codes") or []
+        if codes and svc_code not in codes:
+            continue
+        pct = Decimal(str(a.get("percent") or 0))
+        on = a.get("applies_to") or "labour"
+        if on in ("labour", "all"):
+            lab += pct
+        if on in ("material", "all"):
+            mat += pct
+        labels.append(f"{a.get('label', 'Loading')} +{a.get('percent')}% {on}")
+    return mat, lab, labels
+
+
 def price_job(db: Session, job_id: int) -> dict:
     job = db.get(Job, job_id)
     services = {s.id: s for s in db.scalars(select(Service))}
@@ -186,8 +208,9 @@ def price_job(db: Session, job_id: int) -> dict:
             continue
         uc = book.unit_cost(target_kind, target_code)
         target_qty = src.qty * factor
-        material = money(uc.material * target_qty)
-        labour = money(uc.labour * target_qty)
+        mat_pct, lab_pct, loadings = loading_for(job, svc_code)
+        material = money(uc.material * target_qty * (1 + mat_pct / 100))
+        labour = money(uc.labour * target_qty * (1 + lab_pct / 100))
         hours = (uc.labour_hours * target_qty).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
         cost = material + labour
         pct = margin_pct(job, svc_code, stage_name)
@@ -195,7 +218,8 @@ def price_job(db: Session, job_id: int) -> dict:
         target = (book.prebuilds.get(target_code) if target_kind == "prebuild" else book.items.get(target_code))
         line.update({"target_description": target.description if target else "", "target_qty": float(target_qty),
                      "material_cost": material, "labour_hours": hours, "labour_cost": labour, "cost": cost,
-                     "margin_pct": pct, "sell": sell, "missing": sorted(uc.missing)})
+                     "margin_pct": pct, "sell": sell, "missing": sorted(uc.missing), "loadings": loadings,
+                     "loading_cost": money(uc.material * target_qty * mat_pct / 100) + money(uc.labour * target_qty * lab_pct / 100)})
         missing_codes |= uc.missing
         lines.append(line)
 
@@ -236,8 +260,10 @@ def price_job(db: Session, job_id: int) -> dict:
         sell = sum((ln["sell"] for ln in lines), Decimal(0)) + sum((a["sell"] for a in allowances if a["kind"] != "exclusion"), Decimal(0))
         gst = money(sell * Decimal(str(job.gst_pct)) / 100)
         stage_order = {s.name: s.order for s in stages.values()}
+        loading_cost = sum((ln["loading_cost"] for ln in lines), Decimal(0))
         summary = {
             "material_cost": material, "labour_cost": labour, "labour_hours": hours, "allowances_cost": allow_cost,
+            "loadings": job.rate_adjustments or [], "loading_cost": loading_cost,
             "cost": cost, "margin": sell - cost, "sell_ex_gst": sell, "gst": gst, "sell_inc_gst": sell + gst,
             "by_service": [{"service_code": k, **v} for k, v in sorted(by_service.items())],
             "by_stage": [{"stage": k, **v} for k, v in sorted(by_stage.items(), key=lambda kv: stage_order.get(kv[0], 999))],

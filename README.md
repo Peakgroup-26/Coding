@@ -1,8 +1,131 @@
 # Peak Hydraulic Take-off & Estimating
 
-A web app for Peak Plumbing & Gas Services that turns commercial hydraulic drawings into measured, staged quantities, and later a priced estimate. It follows the build brief "Hydraulic Take-off & Estimating System — Build Brief for Codex".
+A web app for Peak Plumbing & Gas Services that turns commercial hydraulic drawings into measured, staged quantities and a priced estimate, and civil plans into a bill of quantities priced from Peak's previous civil jobs. It follows the build brief "Hydraulic Take-off & Estimating System — Build Brief for Codex".
 
-**Status: all five phases in the brief are built:** core take-off, rules and check-measure, pricing, AI assistance, and polish. They have been tested on generated drawings; tuning against Peak's real drawings and data comes next (see "Before going live").
+**Status: all five phases in the brief are built,** plus the autopilot ("drop the plans in") and the civil BOQ. They have been tested on generated drawings; tuning against Peak's real drawings and data comes next (see "Before going live").
+
+**Putting it on the Plesk server:** see [deploy/PLESK.md](deploy/PLESK.md).
+
+## Drop the plans in (autopilot)
+
+The home page has two drop zones: **Hydraulic take-off** and **Civil BOQ**. Drop the whole PDF set on one, and the job is created and read in the background while a progress screen shows where it's up to.
+
+For a **hydraulic** set, the autopilot:
+
+1. splits the PDFs into sheets and has the AI read each one: number, title, revision, scale, sheet type and services;
+2. sets each plan's scale from its title block, then **confirms it against dimension strings on the sheet**. Two or more dimensions must agree within 1%, and any nearby dimension that disagrees stops it. If it can't confirm a scale, the plan goes on the "Needs you" list for a two-click check instead of being measured;
+3. works out which line colours and layers are which pipes (service, DN, material) from the legend, the layer names and the labels, and traces them into runs;
+4. counts items tagged with text on the plan (FW, IO, HR …), leaving out the legend and title block.
+
+The overview then shows what it found, what needs you, and three steps: **check it on the drawings**, **approve everything**, and **download the Excel BOQ** (or Simpro CSV). Nothing the AI finds counts until it's approved. Approving also saves the line colours for that client, so the next set from the same consultant is read the same way without asking the AI.
+
+## Signing in, permissions and the admin portal
+
+Everyone signs in with email and password (or Microsoft 365 once it's set up) and can change their password under **My account**. The **Admin portal** (admins only) has four tabs:
+
+- **People & permissions:** add people and tick what each can see. The options are *Plumbing* jobs, *Civil* jobs, *Everyone's jobs* (other people's and previous tenders; off means only jobs they started), *Past civil rates* (the previous-jobs rates library) and *Edit pricing* (price books, mappings, rules). Admins always see everything. The server enforces these on every request, for any job, sheet, line or document, so hiding a menu isn't the only protection.
+- **All jobs:** every plumbing and civil job, who started it, and where it's up to.
+- **AI memory:** see below.
+- **Lists & settings:** services, stages, materials, count items, benchmarks and the Simpro layout.
+
+## The AI chat panel and memory
+
+Every job has an **Ask the AI** panel down the right-hand side. Tell it what to do, typed or spoken: "make all the sanitary DN150", "trace the green dashed line as 25 copper cold water", "count every FW", "accept the tender items but make night works 15%", "add 120 m of kerb at $85", "what's still to do?". It uses the same actions as the buttons, under the person's own name in the audit log. It lists what it did under each reply. Anything it adds is still a suggestion until approved, and it asks before changing more than 20 things at once.
+
+- **Microphone:** press 🎤 and talk. *Hands-free* sends as soon as you stop talking; *read aloud* speaks the replies. This uses the browser's own speech recognition (Chrome, Edge, Safari) and needs HTTPS. Chrome and Edge send the audio to Google or Microsoft to turn it into text; the text then goes to Anthropic like a typed message.
+- **Memory:** when you tell it a preference or correct it ("ABC always draw sewer in brown", "we always use Rehau for acoustic"), it saves a memory for all jobs, that client, or that job. Memories go into every later chat and every automatic read they apply to. Admins can edit, switch off or add memories in the admin portal.
+- **One conversation per job,** shared by everyone working on it. Long conversations are summarised automatically, and *New chat* starts afresh (memories carry over).
+
+## Residential, commercial and maintenance
+
+The home page has a tab for each sector. Plans dropped in a tab, and leads added there, belong to that sector:
+
+- Each sector has its own job list, its own quote numbers (`RES-2026-0001`, `COM-…`, `MNT-…`) and its own sales figures.
+- An admin can limit people to certain sectors (Admin portal → People & permissions).
+
+**Leads:** *+ New lead* records an enquiry before any plans arrive. Almost everything is tapped, not typed:
+
+- sector, plumbing or civil, type of work (each sector has its own list), where it came from, rough size and when the quote is due are buttons
+- client and contact are drop-downs of the ones already used, with *+ New…* for someone new
+- the job name fills itself in (e.g. "Hot water – ABC Strata") unless you type one
+
+Drop the plans on it later and it carries on as a normal job.
+
+**Pipeline:** each job shows where it is: **Lead → Quoting → Quote sent → Won / Lost**.
+
+- *Mark quote sent* asks when it went out (Today / Yesterday / pick) and the price. *Lost* and *Withdrawn* ask why, with a tap list of reasons. The dates are recorded as they happen and every date can be corrected.
+- An admin edits the tap lists (lead sources, lost reasons, types of work per sector) in Admin portal → Reporting.
+- Quoting happens by itself when plans arrive.
+
+## Sales dashboard
+
+**Sales** in the top menu, for all sectors or one, over the last 3, 6, 12 or 24 months:
+
+- **Leads, conversion rates and value:**
+  - leads, and the % quoted
+  - % of quotes won, and % of leads won overall
+  - value quoted and won
+- **Time to convert:** average and middle days from lead to quote returned, quote to won, lead to won in total, and quote to lost.
+- **Lists:**
+  - the pipeline right now, with values
+  - quotes waiting on an answer, oldest first (more than two weeks is highlighted for follow-up)
+  - leads still to quote, with due dates and anything overdue
+- **Breakdowns:**
+  - month by month: leads, quotes sent, won, lost and won value
+  - by sector, type of work, job size, client, lead source and estimator: quote rate, win rate, value and days to quote
+  - why jobs are lost: count, share and value for each reason
+
+Conversion is counted by cohort: of the leads that came in during the period, how many were quoted and how many won. The win rate of quotes decided in the period is shown alongside. Admins can edit the pick lists (Admin portal → Reporting).
+
+## Reports
+
+Each job has a **Reports** page (link at the top of the job), and *Download all reports* gives one Excel workbook with everything:
+
+- **Crew & program.** Set the start date, then either a target duration (the app works out the crew) or a crew size (the app works out how long it takes). You get:
+  - plumbers, apprentices and supervisors needed, and project-management hours
+  - stage-by-stage dates on a working-day calendar (weekends, QLD public holidays and the Christmas shutdown skipped), as a Gantt chart
+  - people on site each week, and the total working days
+
+  Override any stage's crew or start date to match the builder's program.
+- **Labour hours** by stage, by service and line by line, showing where each figure came from (price book or productivity rate). Items with no labour rate are listed rather than guessed.
+- **Material list** to order from: pipe including waste and rounded up to stock lengths, fittings and sundries, and fixtures. It can be split by stage for staged ordering.
+- **Cash flow:** the value earned each month (each stage spread over its working days), for progress claims. This needs a price book on hydraulic jobs.
+
+Labour comes from the price book's prebuild labour hours first, then **productivity rates** (Admin portal → Reporting). Those are Peak's own hours per metre, per item or per civil unit; none are built in, and `docs/productivity-rates-template.csv` shows the layout with example rows that import switched off. The crew settings are admin settings too: hours per day, apprentice ratio and output, people per supervisor, PM %, stock lengths, the shutdown, and your headcount.
+
+The **Reports** page in the top menu covers every job you can see:
+
+- the tender pipeline (pending, won and lost, with values) and your win rate
+- tenders due in the next 14 days
+- a **workforce forecast**: people needed each week across won jobs (optionally pending ones too), against your headcount, with any short weeks flagged
+- how well the AI is doing
+- the most common exclusions
+
+Record each tender's result and submitted price at the top of its job page.
+
+## Tender documents
+
+Drop the scope of works, specifications, acoustic reports, design briefs, addenda and tender conditions in with the plans (PDF, Word, Excel or text), or add them later from the job page. The app tells documents from drawings by page size: mostly-A4 PDFs are documents. The AI reads each document **before** the drawings, and lists what changes the take-off or the price. Each item quotes the document's own words and page:
+
+| Type | Accepting it… |
+|---|---|
+| Material specified (e.g. acoustic PVC in ceilings) | changes that service's pipe material on its runs, and the autopilot uses it from then on. The price follows through the price mappings. |
+| Exclusion ("by others") | stops that service (or civil category) being taken off, removes its suggestions, and lists it as an exclusion |
+| Allowance (provisional sum, PC item, CCTV, fees…) | adds it to the estimate (or a line to the civil BOQ) |
+| Rate loading (night works, access, rock…) | adds the % you set to labour, materials or both for the services or civil category it names |
+| Inclusion, commercial risk, note | lists it in the Excel export's **Tender notes** sheet |
+
+The AI never invents amounts or percentages: where the document doesn't state one, the item waits for you to enter it. While the drawings are read, the document requirements are passed to the AI too, so the specified materials and scope steer how the plans are read. Everything can be undone, and removing a document undoes what was accepted from it.
+
+## Civil BOQ
+
+1. **Load previous jobs' rates** (*Civil rates* in the menu): drop in the priced BOQs from past civil jobs, Excel or CSV. Any layout works if it has a header row with *Description* and *Rate* (*Unit* and *Qty* are used too). Section headings become categories.
+2. **Drop the civil plans** on the *Civil BOQ* zone. The AI reads each sheet and lists the quantities written on it: pit and pipe schedules, long sections, labelled lengths and areas. It never estimates. Anything it can see but can't quantify is listed as *needs a quantity*.
+3. **Duplicates are merged:** a pipe on the plan and on its long section is counted once. The AI decides which items are the same work; the app does the arithmetic.
+4. **Each line is priced** from the matching rates in previous jobs (the middle value). It shows which jobs those rates came from, and you can type over any quantity or rate.
+5. **Approve** lines one at a time or all together, then **download the Excel BOQ**: priced lines by category with subtotals, plus tabs for unapproved lines and for every quantity by sheet.
+
+Reading the plans again (for example, a new revision) keeps approved lines and typed-in rates. If the new reading differs, it adds a note to the line instead of changing an approved quantity.
 
 ## What Phase 1 does
 
@@ -155,14 +278,8 @@ Everything here only *suggests*. Suggestions are drawn dashed, labelled, and sta
   - waste % per material
   - benchmarks
 - **Match the Simpro CSV layout** to Peak's actual Simpro import.
-- **Production setup.** These are built and tested, but still need choosing and setting up:
-  - hosting
-  - HTTPS in front of the app
-  - PostgreSQL backups
-  - the S3 bucket and its credentials
-  - a fixed `SECRET_KEY`
-
-  A background queue for very large uploads is still to do if they turn out slow.
+- **Production setup:** follow [deploy/PLESK.md](deploy/PLESK.md). It covers HTTPS, the settings file with random secrets, nightly backups and updates. The AI needs an Anthropic API key; without one the app runs, but sorts sheets by keywords only and takes nothing off automatically.
+- **Check the autopilot on real sets.** Watch how often it confirms scales from dimensions and names the line colours correctly on Peak's consultants' drawings, and tune it from there. Civil quantities should be spot-checked against the schedules on the first few jobs.
 - **Have a developer review the code and hosting,** as the brief recommends.
 
 Peak's inputs (the brief's "Inputs Peak must supply") are needed now, especially the fitting and sundry rules, the Simpro prebuild export, the rates, and three completed jobs for the golden-job test.
@@ -195,7 +312,7 @@ cp .env.example .env      # fill in SECRET_KEY, POSTGRES_PASSWORD, ADMIN_EMAIL, 
 docker compose up --build -d
 ```
 
-This runs the app (API plus built frontend, as a non-root user) and PostgreSQL 16. Drawings go in the `files` volume, or in S3 with `STORAGE_BACKEND=s3`. Put HTTPS in front of it.
+This runs the app (API plus built frontend, as a non-root user) and PostgreSQL 16. Drawings go in the `files` volume, or in S3 with `STORAGE_BACKEND=s3`. The app only listens on `127.0.0.1`, so put HTTPS in front of it. On the Plesk server, `deploy/install.sh` does all of this and `deploy/PLESK.md` explains each step.
 
 ### Database migrations
 
@@ -261,6 +378,17 @@ backend/app/
   pricebook_import.py CSV/Excel price list, prebuild and rate import
   simpro.py           Simpro CSV
   ai.py, suggest.py   AI sheet reading; line-style and symbol suggestions
+  assist.py           AI steps shared by the sheet tools and the autopilot
+  autopilot.py        drop-the-plans-in pipeline (runs in the background)
+  autoscale.py        confirms a scale against dimension strings on the sheet
+  civil.py            civil BOQ: rate import, merging, pricing from past jobs, export
+  tender.py           tender documents: reading, and applying / undoing their requirements
+  access.py           permissions, checked on every request
+  chat.py, chat_tools.py   the chat panel: conversation handling and the actions the AI can take
+  memory.py           the AI's memory
+  reports.py          material lists, labour, crew, programs, cash flow, dashboard
+  reports_export.py   the reports workbook
+  sales.py            sectors, the lead-to-job pipeline, the sales dashboard
   revision.py         revision compare
   markup.py           marked-up PDF
   sso.py              Microsoft 365 sign-on
@@ -272,6 +400,7 @@ backend/migrations/   Alembic migrations
 backend/tests/        unit and acceptance tests
 frontend/src/         React + TypeScript app (Konva canvas for the take-off overlay)
 docs/                 fitting rules template, sample price book
+deploy/               Plesk guide, install / update / backup scripts, nginx settings
 DECISIONS.md          assumptions and choices made where the brief left room
 ```
 

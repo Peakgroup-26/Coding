@@ -371,7 +371,7 @@ export default function SheetViewer() {
     <div className="viewer">
       {showHelp && <ShortcutsHelp onClose={() => setShowHelp(false)} />}
       <div className="toolbar">
-        <Link to={`/jobs/${sheet.job_id}`}>← Register</Link>
+        <Link to={`/jobs/${sheet.job_id}`}>← Job</Link> <Link to={`/jobs/${sheet.job_id}/details`}>Sheets</Link>
         <b>{sheet.sheet_no || `Page ${sheet.page_no}`}</b> <span className="muted">Rev {sheet.revision || "–"} · {sheet.title}</span>
         <span className="spacer" />
         {([
@@ -647,7 +647,7 @@ export default function SheetViewer() {
                   </li>
                 ))}
               </ul>
-              <Link className="small" to={`/jobs/${sheet.job_id}`}>Resolve flags on the job's Check-measure tab</Link>
+              <Link className="small" to={`/jobs/${sheet.job_id}/details`}>Resolve flags on the job's Check-measure tab</Link>
             </section>
           )}
 

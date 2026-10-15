@@ -9,15 +9,12 @@ from sqlalchemy.orm import Session
 
 from .. import storage
 from ..ai import AIUnavailable, ai_status, get_reader
+from ..assist import create_suggested_runs, read_and_apply
 from ..audit import record, snapshot
 from ..auth import current_user
 from ..db import get_db
-from ..geometry import RunShape, overlap_fraction
-from ..models import (AiOutcome, CountItem, CountType, Job, Material, Run, Service, Sheet, StyleMapping, User)
-from ..pdf_processing import refresh_currency
-from ..scale import pick_title_block_scale, stated_m_per_pt
-from ..suggest import chain_segments, extract_segments, match_symbols, style_summary
-from ..takeoff import recompute_run, resolve_scale
+from ..models import AiOutcome, CountItem, CountType, Job, Run, Service, Sheet, StyleMapping, User
+from ..suggest import extract_segments, match_symbols, style_summary
 from . import ensure_open, get_or_404
 
 router = APIRouter(prefix="/api", tags=["ai"])
@@ -33,42 +30,10 @@ def _read_one(db: Session, sheet: Sheet, user: User) -> dict:
     reader = get_reader()
     if reader is None:
         raise HTTPException(409, "AI sheet reading is switched off. Set TAKEOFF_AI=claude on the server to turn it on.")
-    services = [s.code for s in db.scalars(select(Service).where(Service.active.is_(True)))]
-    count_types = [c.name for c in db.scalars(select(CountType).where(CountType.active.is_(True)))]
-    png = storage.local_path(sheet.image_key).read_bytes()
     try:
-        reading = reader.read_sheet(png, sheet.extracted_text, services, count_types)
+        return read_and_apply(db, reader, sheet, user)
     except AIUnavailable as e:
         raise HTTPException(503, str(e))
-    before = snapshot(sheet)
-    sheet.ai_reading = {
-        "sheet_no": reading.sheet_no, "title": reading.title, "revision": reading.revision, "scale_text": reading.scale_text,
-        "sheet_type": reading.sheet_type, "services": reading.services, "is_hydraulic": reading.is_hydraulic,
-        "confidence": reading.confidence, "model": reading.model,
-        "legend": [{"description": e.description, "item_type": e.item_type, "service_code": e.service_code} for e in reading.legend],
-    }
-    applied = False
-    if not sheet.confirmed:
-        # Only fill in what the AI read; keep anything it left blank.
-        sheet.sheet_no = reading.sheet_no or sheet.sheet_no
-        sheet.title = reading.title or sheet.title
-        sheet.revision = reading.revision or sheet.revision
-        sheet.classification = reading.sheet_type
-        sheet.services_shown = reading.services
-        sheet.is_hydraulic = reading.is_hydraulic
-        sheet.confidence = reading.confidence
-        if reading.scale_text and not sheet.stated_scale:
-            st = pick_title_block_scale(reading.scale_text)
-            if st:
-                sheet.stated_scale = st.text
-                sheet.stated_m_per_pt = stated_m_per_pt(st.ratio, st.paper, sheet.width_pt, sheet.height_pt)
-        sheet.proposed = {"classification": reading.sheet_type, "services": reading.services,
-                          "is_hydraulic": reading.is_hydraulic, "source": "ai"}
-        applied = True
-    db.flush()
-    refresh_currency(db, sheet.job_id)
-    record(db, user.id, "sheet", sheet.id, "ai_read", before, snapshot(sheet))
-    return {"sheet_id": sheet.id, "applied": applied, "reading": sheet.ai_reading}
 
 
 @router.post("/sheets/{sheet_id}/ai-read")
@@ -137,56 +102,24 @@ def suggest_runs(sheet_id: int, body: SuggestRunsIn, db: Session = Depends(get_d
         raise HTTPException(409, "This sheet has been superseded")
     if not sheet.scale_verified:
         raise HTTPException(409, "Verify this sheet's scale before suggesting runs")
-    styles = extract_segments(sheet)
     client = _client(db, sheet)
-    assigns = body.styles
+    assigns = [a.model_dump() for a in body.styles]
     if not assigns:
+        styles = extract_segments(sheet)
         saved = db.scalars(select(StyleMapping).where(StyleMapping.client == client))
-        assigns = [StyleAssign(key=m.style_key, service_id=m.service_id, dn=m.dn, material=m.material) for m in saved if m.style_key in styles]
+        assigns = [{"key": m.style_key, "service_id": m.service_id, "dn": m.dn, "material": m.material}
+                   for m in saved if m.style_key in styles]
         if not assigns:
             raise HTTPException(422, "Assign at least one line style to a service, size and material")
-
-    existing = [RunShape(r.id, r.geometry, r.service_id, r.dn, len(r.geometry) < 2)
-                for r in db.scalars(select(Run).where(Run.sheet_id == sheet.id))]
-    materials = {m.name: m.waste_pct for m in db.scalars(select(Material))}
-    created, skipped_overlap, skipped_short, skipped_scale = 0, 0, 0, 0
     for a in assigns:
-        st = styles.get(a.key)
-        if st is None:
-            raise HTTPException(422, f"Line style {a.key} isn't on this sheet")
-        svc = get_or_404(db, Service, a.service_id)
-        if body.remember:
-            m = db.scalar(select(StyleMapping).where(StyleMapping.client == client, StyleMapping.style_key == a.key))
-            if m is None:
-                m = StyleMapping(client=client, style_key=a.key)
-                db.add(m)
-            m.service_id, m.dn, m.material = a.service_id, a.dn, a.material
-        for pts in chain_segments(st["segments"]):
-            length_pt = sum(math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]) for i in range(len(pts) - 1))
-            try:
-                mpp, vp_id = resolve_scale(sheet, pts)
-            except HTTPException:
-                skipped_scale += 1
-                continue
-            if length_pt * mpp < body.min_length_m:
-                skipped_short += 1
-                continue
-            shape = RunShape(-1, pts, a.service_id, a.dn, False)
-            if any(e.service_id == a.service_id and overlap_fraction(shape, e) > 0.8 for e in existing):
-                skipped_overlap += 1
-                continue
-            run = Run(job_id=sheet.job_id, sheet_id=sheet.id, viewport_id=vp_id, service_id=a.service_id, dn=a.dn,
-                      material=a.material, stage_id=svc.default_stage_id, geometry=[list(p) for p in pts], m_per_pt=mpp,
-                      waste_pct=materials.get(a.material, 0.0), status="suggested", source="ai", created_by=user.id)
-            recompute_run(db, run)
-            db.add(run)
-            db.flush()
-            existing.append(RunShape(run.id, pts, a.service_id, a.dn, False))
-            created += 1
-    record(db, user.id, "sheet", sheet.id, "suggest_runs", after={"job_id": sheet.job_id, "created": created})
+        get_or_404(db, Service, a["service_id"])
+    try:
+        result = create_suggested_runs(db, sheet, assigns, user, client=client, remember=body.remember,
+                                       min_length_m=body.min_length_m)
+    except KeyError as e:
+        raise HTTPException(422, f"Line style {e.args[0]} isn't on this sheet")
     db.commit()
-    return {"created": created, "skipped_overlapping": skipped_overlap, "skipped_short": skipped_short,
-            "skipped_viewport_edge": skipped_scale}
+    return result
 
 
 # --- symbol matching -> suggested counts ---

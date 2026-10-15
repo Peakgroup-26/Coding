@@ -1,0 +1,9 @@
+kind,service_code,dn_min,dn_max,material,item_type,civil_category,keyword,unit,hours_per_unit,note,active
+hydraulic,SAN,,,,,,,,0.30,EXAMPLE ONLY - hours per metre of sanitary drainage; replace with Peak's figure,true
+hydraulic,SAN,100,150,,,,,,0.40,EXAMPLE ONLY - DN100-150 sanitary per metre,true
+hydraulic,CW,15,25,Copper,,,,,0.25,EXAMPLE ONLY - small-bore copper per metre,true
+hydraulic,,,,,WC,,,,2.50,EXAMPLE ONLY - hours to fit off one WC,true
+hydraulic,,,,,Floor waste,,,,0.75,EXAMPLE ONLY - hours per floor waste,true
+civil,,,,,,Stormwater drainage,RCP,m,0.60,EXAMPLE ONLY - hours per metre of RCP (crew hours),true
+civil,,,,,,Stormwater drainage,pit,ea,8.0,EXAMPLE ONLY - hours per pit,true
+civil,,,,,,Kerb and channel,,m,0.25,EXAMPLE ONLY - hours per metre of kerb,true

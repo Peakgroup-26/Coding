@@ -5,7 +5,7 @@ Geometry is stored in sheet coordinates: PDF points (1/72 inch) on the page as d
 """
 from datetime import date, datetime, timezone
 
-from sqlalchemy import JSON, Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import JSON, Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint, true
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .db import Base
@@ -23,6 +23,13 @@ class User(Base):
     role: Mapped[str] = mapped_column(String(20), default="estimator")  # estimator | reviewer | admin
     password_hash: Mapped[str] = mapped_column(String(255))
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # What this user can see and do. Admins can always do everything.
+    can_hydraulic: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())  # plumbing jobs
+    can_civil: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())  # civil jobs
+    can_all_jobs: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())  # other people's and previous tenders
+    can_past_rates: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())  # previous civil job rates
+    can_pricing: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())  # price books, mappings, rules
+    sectors: Mapped[list | None] = mapped_column(JSON, nullable=True)  # residential / commercial / maintenance; empty = all
 
 
 class Stage(Base):
@@ -91,6 +98,39 @@ class Job(Base):
     signed_off_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     checks_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    kind: Mapped[str] = mapped_column(String(20), default="hydraulic", server_default="hydraulic")  # hydraulic | civil
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    # Program and tender outcome (reports.py)
+    start_date: Mapped[date | None] = mapped_column(Date, nullable=True)  # planned start on site
+    target_weeks: Mapped[float | None] = mapped_column(Float, nullable=True)  # finish within this many weeks
+    program: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # crew and per-stage overrides
+    tender_result: Mapped[str] = mapped_column(String(20), default="pending", server_default="pending")  # pending | won | lost | withdrawn
+    tender_value: Mapped[float | None] = mapped_column(Float, nullable=True)  # price submitted, ex GST
+    # Sales tracking (sales.py)
+    sector: Mapped[str] = mapped_column(String(20), default="commercial", server_default="commercial")  # residential | commercial | maintenance
+    lead_date: Mapped[date | None] = mapped_column(Date, nullable=True)  # enquiry received
+    quote_sent_date: Mapped[date | None] = mapped_column(Date, nullable=True)  # quote returned to the client
+    decided_date: Mapped[date | None] = mapped_column(Date, nullable=True)  # won / lost / withdrawn
+    lead_source: Mapped[str] = mapped_column(String(100), default="", server_default="")
+    contact: Mapped[str] = mapped_column(String(300), default="", server_default="")  # name, phone, email
+    work_type: Mapped[str] = mapped_column(String(100), default="", server_default="")  # picked from the sector's list
+    value_band: Mapped[str] = mapped_column(String(40), default="", server_default="")  # rough size of the job, e.g. "10k-50k"
+    outcome_reason: Mapped[str] = mapped_column(String(100), default="", server_default="")  # why it was lost / withdrawn
+    # Progress of the automatic read: {state, step, done, total, started_at, finished_at, attention: [...], summary}
+    autopilot: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # Set by accepted tender requirements (tender.py):
+    excluded_services: Mapped[list | None] = mapped_column(JSON, nullable=True)  # ["FIRE"]: by others
+    spec_materials: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # {"SAN": "Acoustic PVC"}
+    rate_adjustments: Mapped[list | None] = mapped_column(JSON, nullable=True)  # [{requirement_id, label, percent, applies_to, ...}]
+
+    @property
+    def sales_stage(self) -> str:
+        """lead | quoting | quote_sent | won | lost | withdrawn (see sales.py)."""
+        from sqlalchemy.orm import object_session
+
+        from .sales import stage
+
+        return stage(object_session(self), self)
 
     files: Mapped[list["DrawingFile"]] = relationship(back_populates="job", cascade="all, delete-orphan")
     levels: Mapped[list["Level"]] = relationship(back_populates="job", cascade="all, delete-orphan")
@@ -476,3 +516,187 @@ class AiOutcome(Base):
     kind: Mapped[str] = mapped_column(String(10))  # run | count
     outcome: Mapped[str] = mapped_column(String(10))  # accepted | edited | rejected
     at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+# --- Civil BOQ ---
+class CivilRateSet(Base):
+    """Rates from one previous civil job (or a rate schedule), imported from a spreadsheet."""
+    __tablename__ = "civil_rate_sets"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(255))
+    source_file: Mapped[str] = mapped_column(String(500), default="")
+    job_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    notes: Mapped[str] = mapped_column(Text, default="")
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    rates: Mapped[list["CivilRate"]] = relationship(back_populates="rate_set", cascade="all, delete-orphan")
+
+
+class CivilRate(Base):
+    __tablename__ = "civil_rates"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    set_id: Mapped[int] = mapped_column(ForeignKey("civil_rate_sets.id", ondelete="CASCADE"), index=True)
+    code: Mapped[str] = mapped_column(String(100), default="")
+    category: Mapped[str] = mapped_column(String(200), default="")
+    description: Mapped[str] = mapped_column(String(1000))
+    unit: Mapped[str] = mapped_column(String(20), default="")
+    rate: Mapped[float] = mapped_column(Float)
+    qty: Mapped[float | None] = mapped_column(Float, nullable=True)  # the quantity on that job, for reference
+
+    rate_set: Mapped[CivilRateSet] = relationship(back_populates="rates")
+
+
+class CivilTakeoffItem(Base):
+    """A quantity the AI (or a person) read from one civil sheet."""
+    __tablename__ = "civil_takeoff_items"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id", ondelete="CASCADE"), index=True)
+    sheet_id: Mapped[int | None] = mapped_column(ForeignKey("sheets.id", ondelete="CASCADE"), nullable=True, index=True)
+    category: Mapped[str] = mapped_column(String(200), default="")
+    description: Mapped[str] = mapped_column(String(1000))
+    unit: Mapped[str] = mapped_column(String(20), default="")
+    qty: Mapped[float] = mapped_column(Float, default=0.0)
+    basis: Mapped[str] = mapped_column(Text, default="")
+    confidence: Mapped[float] = mapped_column(Float, default=0.0)
+    needs_measuring: Mapped[bool] = mapped_column(Boolean, default=False)
+    line_id: Mapped[int | None] = mapped_column(ForeignKey("civil_boq_lines.id", ondelete="SET NULL"), nullable=True)
+
+
+class CivilBoqLine(Base):
+    __tablename__ = "civil_boq_lines"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id", ondelete="CASCADE"), index=True)
+    sort: Mapped[int] = mapped_column(Integer, default=0)
+    category: Mapped[str] = mapped_column(String(200), default="")
+    description: Mapped[str] = mapped_column(String(1000))
+    unit: Mapped[str] = mapped_column(String(20), default="")
+    qty: Mapped[float] = mapped_column(Float, default=0.0)  # as read: sum or max of its takeoff items
+    combine: Mapped[str] = mapped_column(String(10), default="sum")  # sum | max
+    overridden_qty: Mapped[float | None] = mapped_column(Float, nullable=True)
+    rate: Mapped[float | None] = mapped_column(Float, nullable=True)  # suggested from history, or typed in
+    rate_overridden: Mapped[bool] = mapped_column(Boolean, default=False)
+    rate_sources: Mapped[list | None] = mapped_column(JSON, nullable=True)  # [{rate_id, set, description, unit, rate}]
+    rate_note: Mapped[str] = mapped_column(Text, default="")
+    needs_measuring: Mapped[bool] = mapped_column(Boolean, default=False)
+    status: Mapped[str] = mapped_column(String(20), default="suggested")  # suggested | confirmed
+    source: Mapped[str] = mapped_column(String(20), default="ai")  # ai | manual
+    note: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+# --- Tender documents ---
+class TenderDocument(Base):
+    """A scope, specification, acoustic report, brief, addendum or other tender document for a job."""
+    __tablename__ = "tender_documents"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id", ondelete="CASCADE"), index=True)
+    filename: Mapped[str] = mapped_column(String(500))
+    storage_key: Mapped[str] = mapped_column(String(500))
+    doc_type: Mapped[str] = mapped_column(String(50), default="")  # scope | specification | acoustic_report | brief | ...
+    title: Mapped[str] = mapped_column(String(500), default="")
+    summary: Mapped[str] = mapped_column(Text, default="")
+    page_count: Mapped[int] = mapped_column(Integer, default=0)
+    text: Mapped[str] = mapped_column(Text, default="")  # extracted text, with [Page n] markers
+    status: Mapped[str] = mapped_column(String(20), default="queued")  # queued | read | failed
+    error: Mapped[str] = mapped_column(Text, default="")
+    uploaded_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class TenderRequirement(Base):
+    """Something a tender document says that affects the take-off or the price.
+
+    Starts as a suggestion. Accepting it applies its effect (tender.apply), and what was changed is
+    kept in `applied` so it can be undone.
+    """
+    __tablename__ = "tender_requirements"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id", ondelete="CASCADE"), index=True)
+    document_id: Mapped[int | None] = mapped_column(ForeignKey("tender_documents.id", ondelete="CASCADE"), nullable=True, index=True)
+    # material_spec | exclusion | inclusion | allowance | rate_factor | risk | note
+    category: Mapped[str] = mapped_column(String(30))
+    title: Mapped[str] = mapped_column(String(300))
+    quote: Mapped[str] = mapped_column(Text, default="")  # the document's own words
+    page: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    service_codes: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    civil_category: Mapped[str] = mapped_column(String(200), default="")
+    material: Mapped[str] = mapped_column(String(100), default="")
+    description: Mapped[str] = mapped_column(Text, default="")
+    qty: Mapped[float] = mapped_column(Float, default=0.0)
+    unit: Mapped[str] = mapped_column(String(20), default="")
+    amount: Mapped[float] = mapped_column(Float, default=0.0)  # $ stated in the document (e.g. a provisional sum)
+    allowance_kind: Mapped[str] = mapped_column(String(15), default="")  # pc | provisional | item
+    percent: Mapped[float] = mapped_column(Float, default=0.0)  # a loading; set by the estimator unless stated
+    applies_to: Mapped[str] = mapped_column(String(15), default="")  # labour | material | all
+    confidence: Mapped[float] = mapped_column(Float, default=0.0)
+    status: Mapped[str] = mapped_column(String(20), default="suggested")  # suggested | accepted | rejected
+    applied: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    decided_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+# --- AI memory and chat ---
+class AiMemory(Base):
+    """Something the AI has learnt and should remember: for every job (company), for one client's
+    jobs, or for one job. People can see, edit and delete these in the admin portal."""
+    __tablename__ = "ai_memories"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    scope: Mapped[str] = mapped_column(String(10))  # company | client | job
+    client: Mapped[str] = mapped_column(String(255), default="")
+    job_id: Mapped[int | None] = mapped_column(ForeignKey("jobs.id", ondelete="CASCADE"), nullable=True, index=True)
+    kind: Mapped[str] = mapped_column(String(20), default="")  # hydraulic | civil | "" (both)
+    text: Mapped[str] = mapped_column(Text)
+    source_job_id: Mapped[int | None] = mapped_column(Integer, nullable=True)  # the job it was learnt on
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class ChatSession(Base):
+    """One conversation with the AI about a job. Its system prompt and tools are fixed when it
+    starts, and messages are only ever appended (the API requires the history to stay unchanged)."""
+    __tablename__ = "chat_sessions"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id", ondelete="CASCADE"), index=True)
+    system: Mapped[str] = mapped_column(Text, default="")
+    tool_names: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    summary: Mapped[str] = mapped_column(Text, default="")  # carried over from the previous session
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class ChatMessage(Base):
+    __tablename__ = "chat_messages"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    session_id: Mapped[int] = mapped_column(ForeignKey("chat_sessions.id", ondelete="CASCADE"), index=True)
+    role: Mapped[str] = mapped_column(String(10))  # user | assistant
+    content: Mapped[list] = mapped_column(JSON)  # API content blocks, exactly as sent / received
+    text: Mapped[str] = mapped_column(Text, default="")  # what to show on screen
+    actions: Mapped[list | None] = mapped_column(JSON, nullable=True)  # [{tool, summary}] for display
+    hidden: Mapped[bool] = mapped_column(Boolean, default=False)  # tool results and the like
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class ProductivityRate(Base):
+    """Labour hours per unit of work, for labour reports and programs when the price book has no
+    labour for an item. Peak's own figures: none are built in.
+
+    Hydraulic pipe: service_code (+ DN range, material). Hydraulic items: item_type.
+    Civil: civil_category (+ unit and a keyword in the description). The most specific match wins.
+    """
+    __tablename__ = "productivity_rates"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    kind: Mapped[str] = mapped_column(String(20), default="hydraulic")  # hydraulic | civil
+    service_code: Mapped[str] = mapped_column(String(20), default="")
+    dn_min: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    dn_max: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    material: Mapped[str] = mapped_column(String(100), default="")
+    item_type: Mapped[str] = mapped_column(String(100), default="")
+    civil_category: Mapped[str] = mapped_column(String(200), default="")
+    keyword: Mapped[str] = mapped_column(String(100), default="")
+    unit: Mapped[str] = mapped_column(String(20), default="")
+    hours_per_unit: Mapped[float] = mapped_column(Float)
+    note: Mapped[str] = mapped_column(String(300), default="")
+    active: Mapped[bool] = mapped_column(Boolean, default=True)

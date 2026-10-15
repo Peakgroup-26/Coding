@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -21,6 +22,12 @@ class UserOut(ORM):
     name: str
     role: str
     active: bool
+    can_hydraulic: bool = True
+    can_civil: bool = True
+    can_all_jobs: bool = True
+    can_past_rates: bool = True
+    can_pricing: bool = True
+    sectors: list[str] | None = None
 
 
 class UserIn(BaseModel):
@@ -28,6 +35,12 @@ class UserIn(BaseModel):
     name: str = ""
     role: str = "estimator"
     password: str = Field(min_length=8)
+    can_hydraulic: bool = True
+    can_civil: bool = True
+    can_all_jobs: bool = True
+    can_past_rates: bool = True
+    can_pricing: bool = True
+    sectors: list[str] | None = None
 
 
 class UserPatch(BaseModel):
@@ -35,6 +48,17 @@ class UserPatch(BaseModel):
     role: str | None = None
     active: bool | None = None
     password: str | None = Field(default=None, min_length=8)
+    can_hydraulic: bool | None = None
+    can_civil: bool | None = None
+    can_all_jobs: bool | None = None
+    can_past_rates: bool | None = None
+    can_pricing: bool | None = None
+    sectors: list[str] | None = None
+
+
+class PasswordChange(BaseModel):
+    current_password: str
+    new_password: str = Field(min_length=8)
 
 
 # --- settings ---
@@ -95,6 +119,11 @@ class JobIn(BaseModel):
     quote_no: str = ""
     due_date: date | None = None
     status: str = "draft"
+    kind: Literal["hydraulic", "civil"] = "hydraulic"
+    sector: Literal["residential", "commercial", "maintenance"] = "commercial"
+    lead_source: str = ""
+    contact: str = ""
+    lead_date: date | None = None
 
 
 class JobPatch(BaseModel):
@@ -119,6 +148,24 @@ class JobOut(ORM, JobIn):
     stage_margins: dict | None = None
     gst_pct: float = 10.0
     reference_total_ex_gst: float | None = None
+    created_at: datetime | None = None
+    autopilot: dict | None = None
+    created_by: int | None = None
+    start_date: date | None = None
+    target_weeks: float | None = None
+    program: dict | None = None
+    tender_result: str = "pending"
+    tender_value: float | None = None
+    sector: str = "commercial"
+    lead_date: date | None = None
+    quote_sent_date: date | None = None
+    decided_date: date | None = None
+    lead_source: str = ""
+    contact: str = ""
+    work_type: str = ""
+    value_band: str = ""
+    outcome_reason: str = ""
+    sales_stage: str = "lead"
 
 
 class FileOut(ORM):

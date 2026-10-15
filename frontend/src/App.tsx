@@ -1,12 +1,19 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { Link, Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import { api, getToken, setToken } from "./api";
-import type { Settings, User } from "./types";
+import type { Permissions, Settings, User } from "./types";
 import Login from "./pages/Login";
 import Jobs from "./pages/Jobs";
+import Home from "./pages/Home";
+import JobOverview from "./pages/JobOverview";
+import CivilRates from "./pages/CivilRates";
 import JobPage from "./pages/Job";
 import SheetViewer from "./pages/SheetViewer";
-import Admin from "./pages/Admin";
+import AdminPortal from "./pages/AdminPortal";
+import Account from "./pages/Account";
+import Dashboard from "./pages/Dashboard";
+import Sales from "./pages/Sales";
+import JobReports from "./pages/JobReports";
 import Rules from "./pages/Rules";
 import PriceBooks from "./pages/PriceBooks";
 import Mappings from "./pages/Mappings";
@@ -14,6 +21,9 @@ import Mappings from "./pages/Mappings";
 interface Ctx { user: User; settings: Settings; reloadSettings: () => Promise<void> }
 const AppCtx = createContext<Ctx | null>(null);
 export const useApp = () => useContext(AppCtx)!;
+
+/** Admins can do everything; everyone else has the permissions an admin gave them. */
+export const can = (user: User, permission: keyof Permissions) => user.role === "admin" || user[permission];
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -55,24 +65,41 @@ export default function App() {
         <header className="topbar">
           <Link to="/" className="brand">Peak Take-off</Link>
           <nav>
-            <Link to="/">Jobs</Link>
-            <Link to="/rules">Rules</Link>
-            <Link to="/price-books">Price books</Link>
-            <Link to="/mappings">Mappings</Link>
-            {user.role === "admin" && <Link to="/admin">Admin</Link>}
+            <Link to="/">Home</Link>
+            {can(user, "can_past_rates") && can(user, "can_civil") && <Link to="/civil-rates">Civil rates</Link>}
+            {can(user, "can_hydraulic") && <Link to="/price-books">Price books</Link>}
+            <Link to="/sales">Sales</Link>
+            <Link to="/reports">Reports</Link>
+            {user.role === "admin" && <Link to="/admin">Admin portal</Link>}
+            <details className="more">
+              <summary>More</summary>
+              <div className="menu" onClick={(e) => (e.currentTarget.parentElement as HTMLDetailsElement).open = false}>
+                {can(user, "can_hydraulic") && <Link to="/rules">Fitting rules</Link>}
+                {can(user, "can_hydraulic") && <Link to="/mappings">Price mappings</Link>}
+                <Link to="/jobs">Jobs (set up by hand)</Link>
+                <Link to="/account">My account</Link>
+              </div>
+            </details>
           </nav>
           <span className="spacer" />
-          <span className="muted">{user.name || user.email} · {user.role}</span>
+          <Link to="/account" className="muted">{user.name || user.email} · {user.role}</Link>
           <button className="link" onClick={logout}>Sign out</button>
         </header>
         <Routes>
-          <Route path="/" element={<Jobs />} />
-          <Route path="/jobs/:jobId" element={<JobPage />} />
+          <Route path="/" element={<Home />} />
+          <Route path="/jobs" element={<Jobs />} />
+          <Route path="/jobs/:jobId" element={<JobOverview />} />
+          <Route path="/jobs/:jobId/details" element={<JobPage />} />
+          <Route path="/jobs/:jobId/reports" element={<JobReports />} />
+          <Route path="/reports" element={<Dashboard />} />
+          <Route path="/sales" element={<Sales />} />
+          <Route path="/civil-rates" element={<CivilRates />} />
           <Route path="/sheets/:sheetId" element={<SheetViewer />} />
           <Route path="/rules" element={<Rules />} />
           <Route path="/price-books" element={<PriceBooks />} />
           <Route path="/mappings" element={<Mappings />} />
-          <Route path="/admin" element={user.role === "admin" ? <Admin /> : <Navigate to="/" />} />
+          <Route path="/admin" element={user.role === "admin" ? <AdminPortal /> : <Navigate to="/" />} />
+          <Route path="/account" element={<Account />} />
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>
       </div>

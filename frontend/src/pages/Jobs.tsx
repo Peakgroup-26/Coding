@@ -18,7 +18,7 @@ export default function Jobs() {
     setError("");
     try {
       const job = await api.post<Job>("/api/jobs", { ...form, due_date: form.due_date || null });
-      nav(`/jobs/${job.id}`);
+      nav(`/jobs/${job.id}/details`);
     } catch (err) { setError((err as Error).message); }
   };
 
@@ -29,6 +29,7 @@ export default function Jobs() {
   return (
     <main className="page">
       <h1>Jobs</h1>
+      <p className="muted">Set up a job and its drawings by hand. To have the plans read for you, drop them on the <Link to="/">Home</Link> page instead.</p>
       <div className="two-col">
         <section className="card">
           <table>

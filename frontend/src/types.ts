@@ -1,6 +1,25 @@
 export type Pt = [number, number];
 
-export interface User { id: number; email: string; name: string; role: "estimator" | "reviewer" | "admin"; active: boolean }
+export interface Permissions { can_hydraulic: boolean; can_civil: boolean; can_all_jobs: boolean; can_past_rates: boolean; can_pricing: boolean }
+export type Sector = "residential" | "commercial" | "maintenance";
+export type SalesStage = "lead" | "quoting" | "quote_sent" | "won" | "lost" | "withdrawn";
+export const SECTOR_LABELS: Record<Sector, string> = { residential: "Residential", commercial: "Commercial", maintenance: "Maintenance" };
+export const STAGE_LABELS: Record<SalesStage, string> = {
+  lead: "Lead", quoting: "Quoting", quote_sent: "Quote sent", won: "Won", lost: "Lost", withdrawn: "Withdrawn",
+};
+export interface SalesSettings {
+  lead_sources: string[]; lost_reasons: string[]; work_types: Record<Sector, string[]>; value_bands: { key: string; label: string }[];
+  sectors: { key: Sector; label: string }[]; counts: Record<Sector, number>;
+}
+export interface ClientChoice { name: string; jobs: number; contacts: string[]; sectors: Sector[] }
+export interface User extends Permissions { id: number; email: string; name: string; role: "estimator" | "reviewer" | "admin"; active: boolean; sectors?: Sector[] | null }
+
+export interface ChatAction { tool: string; summary: string }
+export interface ChatMsg { id: number; role: "user" | "assistant" | "note"; text: string; actions: ChatAction[]; user?: string; at?: string }
+export interface Memory {
+  id: number; scope: "company" | "client" | "job"; client: string; job_id: number | null; job: string; kind: string;
+  text: string; active: boolean; created_by: string; created_at: string;
+}
 export interface Stage { id: number; name: string; order: number; active: boolean }
 export interface Service { id: number; code: string; name: string; colour: string; kind: string; default_stage_id: number | null; order: number; active: boolean }
 export interface Material { id: number; name: string; waste_pct: number; active: boolean }
@@ -11,7 +30,59 @@ export interface Job {
   id: number; name: string; client: string; builder: string; address: string;
   quote_no: string; due_date: string | null; status: string;
   signed_off_by: number | null; signed_off_at: string | null; checks_run_at: string | null;
+  kind?: "hydraulic" | "civil"; created_at?: string | null; autopilot?: AutopilotStatus | null; created_by?: number | null;
+  start_date?: string | null; target_weeks?: number | null; program?: Record<string, unknown> | null;
+  tender_result?: "pending" | "won" | "lost" | "withdrawn"; tender_value?: number | null;
+  sector?: Sector; lead_date?: string | null; quote_sent_date?: string | null; decided_date?: string | null;
+  lead_source?: string; contact?: string; sales_stage?: SalesStage;
+  work_type?: string; value_band?: string; outcome_reason?: string;
 }
+
+export interface Attention { kind: string; message: string; sheet_id?: number; sheet?: string }
+
+export interface AutopilotStatus {
+  state: "never" | "queued" | "running" | "done" | "failed" | "interrupted";
+  step?: string; done?: number; total?: number; error?: string;
+  started_at?: string; finished_at?: string;
+  attention?: Attention[];
+  summary?: Record<string, number>;
+  running?: boolean;
+  tender?: { documents: number; requirements: number; suggested: number; accepted: number };
+}
+
+export interface CivilItem { id: number; sheet_id: number | null; sheet: string; description: string; unit: string; qty: number; basis: string; confidence: number }
+export interface RateSource { rate_id: number; job: string; description: string; unit: string; rate: number }
+export interface CivilLine {
+  id: number; sort: number; category: string; description: string; unit: string;
+  qty: number; overridden_qty: number | null; effective_qty: number; combine: string;
+  rate: number | null; rate_overridden: boolean; rate_sources: RateSource[]; rate_note: string;
+  amount: number; needs_measuring: boolean; status: "suggested" | "confirmed"; source: string; note: string;
+  items: CivilItem[];
+}
+export interface CivilLoading { label: string; percent: number; category: string; amount: number }
+export interface CivilSummary {
+  lines: number; lines_suggested: number; lines_confirmed: number; needs_measuring: number; unpriced: number;
+  lines_total_ex_gst: number; loadings: CivilLoading[]; total_confirmed_ex_gst: number;
+}
+
+export interface TenderDoc {
+  id: number; filename: string; doc_type: string; title: string; summary: string; page_count: number;
+  status: "queued" | "read" | "failed"; error: string; created_at: string; requirements: number; suggested: number;
+}
+export type ReqCategory = "material_spec" | "exclusion" | "inclusion" | "allowance" | "rate_factor" | "risk" | "note";
+export interface Requirement {
+  id: number; document_id: number | null; document: string; category: ReqCategory; title: string; quote: string;
+  page: number | null; service_codes: string[]; civil_category: string; material: string; description: string;
+  qty: number; unit: string; amount: number; allowance_kind: string; percent: number; applies_to: string;
+  confidence: number; status: "suggested" | "accepted" | "rejected"; effect: string; needs: string;
+}
+export interface RequirementList {
+  requirements: Requirement[]; labels: Record<string, string>;
+  excluded_services: string[]; spec_materials: Record<string, string>; loadings: { label: string; percent: number }[];
+}
+export interface CivilBoq { lines: CivilLine[]; summary: CivilSummary; categories: string[]; units: string[] }
+export interface RateSet { id: number; name: string; source_file: string; job_date: string | null; notes: string; active: boolean; created_at: string; rates: number }
+export interface CivilRate { id: number; code: string; category: string; description: string; unit: string; rate: number; qty: number | null }
 
 export interface Level { id: number; job_id: number; name: string; rl: number; floor_to_floor_m: number }
 
@@ -144,6 +215,7 @@ export interface Allowance {
 export interface PricingSummary {
   material_cost: number; labour_cost: number; labour_hours: number; allowances_cost: number; cost: number; margin: number;
   sell_ex_gst: number; gst: number; sell_inc_gst: number;
+  loading_cost?: number; loadings?: { label: string; percent: number; applies_to: string; service_codes: string[] }[];
   by_service: { service_code: string; cost: number; sell: number; labour_hours: number }[];
   by_stage: { stage: string; cost: number; sell: number; labour_hours: number }[];
   reference_total_ex_gst?: number; reference_variance_pct?: number | null;
