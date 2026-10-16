@@ -65,10 +65,12 @@ def build_csv(pricing: dict, template: dict) -> str:
     by_stage, by_service = template.get("group_by_stage", True), template.get("group_by_service", True)
     groups: dict[tuple, dict] = {}
     for ln in pricing["lines"]:
-        key = (ln["target_kind"], ln["target_code"], ln["stage"] if by_stage else "", ln["service_code"] if by_service else "")
+        one_off = ln["target_kind"] == "workbook"  # a workbook row goes across as a one-off item under its own description
+        key = (ln["target_kind"], ln["target_code"], ln["stage"] if by_stage else "", ln["service_code"] if by_service else "",
+               ln["description"] if one_off else "")
         g = groups.setdefault(key, defaultdict(float, {
-            "code": ln["target_code"], "description": ln.get("target_description") or ln["description"],
-            "type": "Prebuild" if ln["target_kind"] == "prebuild" else "Catalogue",
+            "code": ln["target_code"], "description": ln["description"] if one_off else (ln.get("target_description") or ln["description"]),
+            "type": "Prebuild" if ln["target_kind"] == "prebuild" else ("One-off" if one_off else "Catalogue"),
             "uom": ln["uom"] if ln["factor"] == 1 else "", "stage": key[2], "service": key[3]}))
         g["qty"] += ln.get("target_qty", ln["qty"])
         for f_src, f_dst in (("cost", "cost_ex"), ("sell", "sell_ex"), ("labour_hours", "labour_hours")):

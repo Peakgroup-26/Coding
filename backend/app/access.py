@@ -8,6 +8,7 @@ Each user has these permissions (admins always have all of them):
   can_pricing     changing price books, mappings, fitting rules and productivity rates (anyone can view them)
   can_ops         live jobs, scheduling, timesheet approval, purchasing, customers and the CRM
   can_finance     WIP, budgets, cash flow, invoices, supplier prices and the Xero connection
+  can_hr          People: staff profiles, pay history, leave balances, licences, reviews, surveys and hiring
 
 Role "field" is for the people on the tools: they only get the phone app (/api/field/...), their own
 time and schedule, the live jobs they work on, and the documents marked for the field.
@@ -25,9 +26,10 @@ from sqlalchemy.orm import Session
 
 from .auth import _bearer, read_token
 from .db import get_db
-from .models import (BudgetLine, CivilBoqLine, CountItem, DailyLog, Document, Flag, FormResponse, GeneratedItem, Invoice,
+from .models import (BudgetLine, CivilBoqLine, CountItem, DailyLog, Document, EstimateLine, EstimateSnapshot, Flag, FormResponse,
+                     GeneratedItem, Invoice,
                      Job, JobAllowance, JobCost, Level, ProjectItem, PurchaseOrder, Run, ScheduleEntry, Sheet, TenderDocument,
-                     TenderRequirement, TimeEntry, User, Variation, Viewport)
+                     TenderRequirement, TimeEntry, TradePackage, User, Variation, Viewport)
 
 PERMISSIONS = {
     "can_hydraulic": "Plumbing jobs",
@@ -37,6 +39,7 @@ PERMISSIONS = {
     "can_pricing": "Change price books, mappings and rules",
     "can_ops": "Live jobs, scheduling, purchasing, customers and CRM",
     "can_finance": "Finance: WIP, budgets, cash flow, invoices, supplier prices, Xero",
+    "can_hr": "People: staff records, pay, leave, reviews and hiring",
 }
 
 # URL parameter -> table whose rows belong to a job
@@ -47,6 +50,7 @@ JOB_PARAMS = {
     "budget_id": BudgetLine, "sched_id": ScheduleEntry, "time_id": TimeEntry, "po_id": PurchaseOrder, "cost_id": JobCost,
     "var_id": Variation, "inv_id": Invoice, "document_id": Document, "pitem_id": ProjectItem, "log_id": DailyLog,
     "resp_id": FormResponse,
+    "wline_id": EstimateLine, "pkg_id": TradePackage, "snap_id": EstimateSnapshot,
 }
 
 # (path prefix, permission, methods it applies to; None = all)
@@ -60,6 +64,8 @@ AREAS = [
     ("/api/benchmarks", "can_pricing", {"POST", "PUT", "PATCH", "DELETE"}),
     ("/api/settings/simpro-template", "can_pricing", {"POST", "PUT", "PATCH", "DELETE"}),
     ("/api/productivity", "can_pricing", {"POST", "PUT", "PATCH", "DELETE"}),
+    ("/api/resources", "can_pricing", {"POST", "PUT", "PATCH", "DELETE"}),
+    ("/api/rate-buildups", "can_pricing", {"POST", "PUT", "PATCH", "DELETE"}),
     ("/api/work", "can_ops", None),
     ("/api/customers", "can_ops", None),
     ("/api/sites", "can_ops", None),
@@ -85,6 +91,7 @@ AREAS = [
     ("/api/plant", "can_ops", None),
     ("/api/form-templates", "can_ops", None),
     ("/api/files", "can_ops", None),
+    ("/api/people", "can_hr", None),
 ]
 # A job's delivery side (/api/jobs/12/costs and so on) needs can_ops as well as access to the job.
 JOB_OPS = re.compile(r"^/api/jobs/\d+/(costs|budget|variations|work|docs|items|diary|forms|time|materials)\b")

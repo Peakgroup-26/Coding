@@ -29,6 +29,7 @@ class UserOut(ORM):
     can_pricing: bool = True
     can_ops: bool = True
     can_finance: bool = False
+    can_hr: bool = False
     sectors: list[str] | None = None
     trade: str = ""
     phone: str = ""
@@ -49,6 +50,7 @@ class UserIn(BaseModel):
     can_pricing: bool = True
     can_ops: bool = True
     can_finance: bool = False
+    can_hr: bool = False
     sectors: list[str] | None = None
     trade: str = ""
     phone: str = ""
@@ -69,6 +71,7 @@ class UserPatch(BaseModel):
     can_pricing: bool | None = None
     can_ops: bool | None = None
     can_finance: bool | None = None
+    can_hr: bool | None = None
     sectors: list[str] | None = None
     trade: str | None = None
     phone: str | None = None

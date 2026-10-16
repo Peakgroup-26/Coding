@@ -223,6 +223,21 @@ def price_job(db: Session, job_id: int) -> dict:
         missing_codes |= uc.missing
         lines.append(line)
 
+    # Workbook rows (estimating.py): priced from their own rates, with or without a price book
+    from .estimating import priced_lines
+
+    workbook = priced_lines(db, job)
+    for w in workbook:
+        lines.append({"kind": "workbook", "service_code": w["service_code"], "stage": w["stage"], "description": w["description"],
+                      "qty": w["qty"], "uom": w["uom"], "material": "", "dn": None, "item_type": "", "target_kind": "workbook",
+                      "target_code": w["rate_code"], "factor": 1.0, "mapping_id": None, "workbook_id": w["id"], "section": w["section"],
+                      "target_description": w["section"], "target_qty": w["qty"],
+                      "material_cost": money(w["material_cost"]), "labour_hours": Decimal(str(w["labour_hours"])),
+                      "labour_cost": money(w["labour_cost"]), "plant_cost": money(w["plant_cost"]),
+                      "subcontract_cost": money(w["subcontract_cost"]), "cost": money(w["cost"]),
+                      "margin_pct": Decimal(str(w["margin_pct"])), "sell": money(w["sell"]), "missing": [], "loadings": [],
+                      "loading_cost": Decimal(0), "error": w["error"]})
+
     allowances = []
     for a in db.scalars(select(JobAllowance).where(JobAllowance.job_id == job_id).order_by(JobAllowance.kind, JobAllowance.id)):
         svc = services.get(a.service_id)
@@ -236,15 +251,16 @@ def price_job(db: Session, job_id: int) -> dict:
             row["sell"] = sell_price(row["amount"], pct, job.margin_basis)
         allowances.append(row)
 
-    priced = book is not None
+    priced = book is not None or bool(workbook)
     summary = None
     if priced:
+        priced_lines_ = [ln for ln in lines if "cost" in ln]  # without a price book only the workbook rows have prices
         by_service: dict[str, dict] = defaultdict(lambda: defaultdict(Decimal))
         by_stage: dict[str, dict] = defaultdict(lambda: defaultdict(Decimal))
-        for ln in lines:
+        for ln in priced_lines_:
             for bucket in (by_service[ln["service_code"] or "–"], by_stage[ln["stage"]]):
-                for f in ("material_cost", "labour_cost", "cost", "sell", "labour_hours"):
-                    bucket[f] += ln[f]
+                for f in ("material_cost", "labour_cost", "plant_cost", "subcontract_cost", "cost", "sell", "labour_hours"):
+                    bucket[f] += ln.get(f, Decimal(0))
         for a in allowances:
             if a["kind"] == "exclusion":
                 continue
@@ -252,17 +268,21 @@ def price_job(db: Session, job_id: int) -> dict:
                 bucket["allowances_cost"] += a["amount"]
                 bucket["cost"] += a["amount"]
                 bucket["sell"] += a["sell"]
-        material = sum((ln["material_cost"] for ln in lines), Decimal(0))
-        labour = sum((ln["labour_cost"] for ln in lines), Decimal(0))
-        hours = sum((ln["labour_hours"] for ln in lines), Decimal(0))
+        material = sum((ln["material_cost"] for ln in priced_lines_), Decimal(0))
+        labour = sum((ln["labour_cost"] for ln in priced_lines_), Decimal(0))
+        plant = sum((ln.get("plant_cost", Decimal(0)) for ln in priced_lines_), Decimal(0))
+        subcontract = sum((ln.get("subcontract_cost", Decimal(0)) for ln in priced_lines_), Decimal(0))
+        hours = sum((ln["labour_hours"] for ln in priced_lines_), Decimal(0))
         allow_cost = sum((a["amount"] for a in allowances if a["kind"] != "exclusion"), Decimal(0))
-        cost = material + labour + allow_cost
-        sell = sum((ln["sell"] for ln in lines), Decimal(0)) + sum((a["sell"] for a in allowances if a["kind"] != "exclusion"), Decimal(0))
+        cost = material + labour + plant + subcontract + allow_cost
+        sell = sum((ln["sell"] for ln in priced_lines_), Decimal(0)) + sum((a["sell"] for a in allowances if a["kind"] != "exclusion"), Decimal(0))
         gst = money(sell * Decimal(str(job.gst_pct)) / 100)
         stage_order = {s.name: s.order for s in stages.values()}
-        loading_cost = sum((ln["loading_cost"] for ln in lines), Decimal(0))
+        loading_cost = sum((ln["loading_cost"] for ln in priced_lines_), Decimal(0))
         summary = {
             "material_cost": material, "labour_cost": labour, "labour_hours": hours, "allowances_cost": allow_cost,
+            "plant_cost": plant, "subcontract_cost": subcontract, "workbook_cost": sum((ln["cost"] for ln in priced_lines_
+                                                                                       if ln["kind"] == "workbook"), Decimal(0)),
             "loadings": job.rate_adjustments or [], "loading_cost": loading_cost,
             "cost": cost, "margin": sell - cost, "sell_ex_gst": sell, "gst": gst, "sell_inc_gst": sell + gst,
             "by_service": [{"service_code": k, **v} for k, v in sorted(by_service.items())],

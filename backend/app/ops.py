@@ -38,6 +38,9 @@ DEFAULTS = {
     "tolerance_pct": 5,  # dashboard: how far over the pro-rata forecast before it goes red
     "opening_bank_balance": 0.0,
     "opening_balance_date": "",
+    "hr_oncost_pct": 25.0,  # super, workcover, payroll tax and leave on top of pay: cost rate = pay x (1 + this)
+    "credential_warn_days": 60,  # remind people this many days before a licence or ticket runs out
+    "leave_tracking_from": "",  # leave builds up from this date (opening balances are as at this date); blank = start dates
 }
 
 
@@ -113,6 +116,10 @@ def start_job(db: Session, job: Job, user: User | None) -> None:
     db.flush()
 
 
+def ops_label(cat: str) -> str:
+    return CATEGORY_LABELS.get(cat, cat.title())
+
+
 def budget_from_estimate(db: Session, job: Job) -> list[BudgetLine]:
     """Budget lines from the take-off: labour hours and cost and materials by stage (plumbing), or the BOQ (civil)."""
     out: list[BudgetLine] = []
@@ -128,8 +135,6 @@ def budget_from_estimate(db: Session, job: Job) -> list[BudgetLine]:
                 out.append(BudgetLine(job_id=job.id, category="other", description=f"{cat} (BOQ less margin)", stage=cat,
                                       cost=round(total * keep, 2), source="estimate"))
         return out
-    if not job.price_book_version_id:
-        return out
     from .pricing import price_job
 
     summary = price_job(db, job.id).get("summary")
@@ -142,6 +147,10 @@ def budget_from_estimate(db: Session, job: Job) -> list[BudgetLine]:
         if st.get("material_cost"):
             out.append(BudgetLine(job_id=job.id, category="materials", description=f"Materials – {st['stage']}", stage=st["stage"],
                                   cost=round(st["material_cost"], 2), source="estimate"))
+        for cat in ("plant", "subcontract"):
+            if st.get(f"{cat}_cost"):
+                out.append(BudgetLine(job_id=job.id, category=cat, description=f"{ops_label(cat)} – {st['stage']}", stage=st["stage"],
+                                      cost=round(st[f"{cat}_cost"], 2), source="estimate"))
         if st.get("allowances_cost"):
             out.append(BudgetLine(job_id=job.id, category="other", description=f"Allowances – {st['stage']}", stage=st["stage"],
                                   cost=round(st["allowances_cost"], 2), source="estimate"))

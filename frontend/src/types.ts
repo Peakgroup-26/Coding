@@ -2,7 +2,7 @@ export type Pt = [number, number];
 
 export interface Permissions {
   can_hydraulic: boolean; can_civil: boolean; can_all_jobs: boolean; can_past_rates: boolean; can_pricing: boolean;
-  can_ops: boolean; can_finance: boolean;
+  can_ops: boolean; can_finance: boolean; can_hr: boolean;
 }
 export type Sector = "residential" | "commercial" | "maintenance";
 export type SalesStage = "lead" | "quoting" | "quote_sent" | "won" | "lost" | "withdrawn";

@@ -390,7 +390,7 @@ def cashflow(db: Session, job: Job, stages: list[dict], cal: Calendar, include_s
         for l in db.scalars(select(CivilBoqLine).where(CivilBoqLine.job_id == job.id)):
             if l.status == "confirmed" or include_suggested:
                 value[l.category] = value.get(l.category, 0.0) + float(money(line_qty(l)) * money(l.rate or 0))
-    elif job.price_book_version_id:
+    else:
         from .pricing import price_job
 
         p = price_job(db, job.id)

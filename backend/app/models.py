@@ -38,6 +38,7 @@ class User(Base):
     cost_rate: Mapped[float] = mapped_column(Float, default=0.0, server_default="0")  # $/h incl. on-costs (super, workcover, leave)
     charge_rate: Mapped[float] = mapped_column(Float, default=0.0, server_default="0")  # $/h charged out on do-and-charge jobs
     colour: Mapped[str] = mapped_column(String(10), default="", server_default="")  # on the schedule board
+    can_hr: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())  # People: profiles, pay, leave, reviews, hiring
 
 
 class Stage(Base):
@@ -1306,3 +1307,562 @@ class Notification(Base):
     key: Mapped[str] = mapped_column(String(100), default="", index=True)  # stops the same reminder being made twice
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+# --- People (hr.py): the BambooHR side ---
+class EmployeeProfile(Base):
+    """Everything about a person beyond their sign-in. Only people with can_hr (and the person) see it."""
+    __tablename__ = "employee_profiles"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), unique=True)
+    position: Mapped[str] = mapped_column(String(100), default="")  # Plumber, 2nd year apprentice, Estimator...
+    department: Mapped[str] = mapped_column(String(50), default="")  # plumbing | civil | maintenance | office | management
+    employment_type: Mapped[str] = mapped_column(String(20), default="full_time")  # full_time | part_time | casual | apprentice | contractor
+    status: Mapped[str] = mapped_column(String(20), default="active")  # active | on_leave | terminated
+    start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    end_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    end_reason: Mapped[str] = mapped_column(String(50), default="")  # resigned | terminated | end of contract | retired
+    manager_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    hours_per_week: Mapped[float] = mapped_column(Float, default=38.0)
+    award: Mapped[str] = mapped_column(String(100), default="")  # Plumbing and Fire Sprinklers Award 2020 ...
+    apprentice_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    dob: Mapped[date | None] = mapped_column(Date, nullable=True)
+    personal_email: Mapped[str] = mapped_column(String(255), default="")
+    address: Mapped[str] = mapped_column(String(500), default="")
+    emergency_contacts: Mapped[list] = mapped_column(JSON, default=list)  # [{name, relationship, phone}]
+    drivers_licence: Mapped[str] = mapped_column(String(50), default="")  # class, e.g. C, HR
+    shirt_size: Mapped[str] = mapped_column(String(10), default="")
+    pants_size: Mapped[str] = mapped_column(String(10), default="")
+    boot_size: Mapped[str] = mapped_column(String(10), default="")
+    medical_notes: Mapped[str] = mapped_column(Text, default="")  # allergies etc. for first aid
+    notes: Mapped[str] = mapped_column(Text, default="")
+    photo_key: Mapped[str] = mapped_column(String(500), default="")
+
+
+class PayChange(Base):
+    """Pay history: a new row for every pay rise, promotion or change of hours."""
+    __tablename__ = "pay_changes"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    effective: Mapped[date] = mapped_column(Date)
+    pay_type: Mapped[str] = mapped_column(String(10), default="hourly")  # hourly | salary
+    amount: Mapped[float] = mapped_column(Float)  # $/h or $/year
+    position: Mapped[str] = mapped_column(String(100), default="")
+    reason: Mapped[str] = mapped_column(String(100), default="")  # Pay review, Apprentice year, Promotion, Award increase
+    notes: Mapped[str] = mapped_column(Text, default="")
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class CredentialType(Base):
+    """Licences, tickets, inductions and training courses, and who must hold them."""
+    __tablename__ = "credential_types"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(100), unique=True)
+    category: Mapped[str] = mapped_column(String(20), default="licence")  # licence | ticket | training | induction
+    renew_months: Mapped[int | None] = mapped_column(Integer, nullable=True)  # expiry worked out from completion when set
+    required_for: Mapped[list] = mapped_column(JSON, default=list)  # trades, e.g. ["plumber", "apprentice"]; ["*"] = everyone
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class Credential(Base):
+    __tablename__ = "credentials"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    type_id: Mapped[int] = mapped_column(ForeignKey("credential_types.id"), index=True)
+    number: Mapped[str] = mapped_column(String(100), default="")
+    issuer: Mapped[str] = mapped_column(String(100), default="")  # QBCC, RTO name...
+    issued: Mapped[date | None] = mapped_column(Date, nullable=True)
+    expires: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
+    hours: Mapped[float | None] = mapped_column(Float, nullable=True)  # training hours
+    cost: Mapped[float | None] = mapped_column(Float, nullable=True)
+    file_key: Mapped[str] = mapped_column(String(500), default="")  # photo of the card / certificate
+    file_name: Mapped[str] = mapped_column(String(255), default="")
+    verified_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    notes: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class LeavePolicy(Base):
+    """How a kind of leave builds up. Kinds match time_off.kind (annual, sick, long_service, rdo...)."""
+    __tablename__ = "leave_policies"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    kind: Mapped[str] = mapped_column(String(20), unique=True)
+    name: Mapped[str] = mapped_column(String(100))
+    hours_per_year: Mapped[float] = mapped_column(Float, default=0.0)  # for a 38 h week; pro-rata to hours worked
+    accrues_on_hours: Mapped[bool] = mapped_column(Boolean, default=True)  # build up with ordinary hours worked, not just time
+    after_years: Mapped[float] = mapped_column(Float, default=0.0)  # long service: only usable after this many years
+    casuals: Mapped[bool] = mapped_column(Boolean, default=False)  # casuals accrue it too
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class LeaveAdjustment(Base):
+    """Opening balances and manual corrections (in hours; minus takes leave off)."""
+    __tablename__ = "leave_adjustments"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    kind: Mapped[str] = mapped_column(String(20))
+    day: Mapped[date] = mapped_column(Date)
+    hours: Mapped[float] = mapped_column(Float)
+    reason: Mapped[str] = mapped_column(String(200), default="")
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+
+
+class ChecklistTemplate(Base):
+    """Onboarding / offboarding steps: [{title, who: hr|manager|employee, due_days, policy_id?, credential_type_id?}]."""
+    __tablename__ = "checklist_templates"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(100))
+    kind: Mapped[str] = mapped_column(String(20), default="onboarding")  # onboarding | offboarding
+    tasks: Mapped[list] = mapped_column(JSON, default=list)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class ChecklistTask(Base):
+    __tablename__ = "checklist_tasks"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)  # the person being on/offboarded
+    kind: Mapped[str] = mapped_column(String(20), default="onboarding")
+    template_id: Mapped[int | None] = mapped_column(ForeignKey("checklist_templates.id"), nullable=True)
+    title: Mapped[str] = mapped_column(String(300))
+    who: Mapped[str] = mapped_column(String(20), default="hr")  # hr | manager | employee
+    assignee_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    due: Mapped[date | None] = mapped_column(Date, nullable=True)
+    policy_id: Mapped[int | None] = mapped_column(ForeignKey("policies.id"), nullable=True)  # done when signed
+    done_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    done_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    position: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class Policy(Base):
+    """Company policies and contracts people read and sign (drug & alcohol, code of conduct, vehicle use...)."""
+    __tablename__ = "policies"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    title: Mapped[str] = mapped_column(String(200))
+    body: Mapped[str] = mapped_column(Text, default="")  # text to read on the phone, or blank when it's a file
+    file_key: Mapped[str] = mapped_column(String(500), default="")
+    file_name: Mapped[str] = mapped_column(String(255), default="")
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    audience: Mapped[str] = mapped_column(String(20), default="all")  # all | field | office | none (only when sent)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class PolicySignature(Base):
+    __tablename__ = "policy_signatures"
+    __table_args__ = (UniqueConstraint("policy_id", "version", "user_id"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    policy_id: Mapped[int] = mapped_column(ForeignKey("policies.id", ondelete="CASCADE"), index=True)
+    version: Mapped[int] = mapped_column(Integer)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    typed_name: Mapped[str] = mapped_column(String(200))
+    signature: Mapped[str] = mapped_column(Text, default="")  # data URL of the drawn signature
+    signed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    ip: Mapped[str] = mapped_column(String(60), default="")
+
+
+class ReviewCycle(Base):
+    __tablename__ = "review_cycles"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(100))  # "2026 annual review", "Apprentice 6-month"
+    due: Mapped[date | None] = mapped_column(Date, nullable=True)
+    questions: Mapped[list] = mapped_column(JSON, default=list)  # [{key, label, type: rating|text}]
+    status: Mapped[str] = mapped_column(String(20), default="open")  # open | closed
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class Review(Base):
+    __tablename__ = "reviews"
+    __table_args__ = (UniqueConstraint("cycle_id", "user_id"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    cycle_id: Mapped[int] = mapped_column(ForeignKey("review_cycles.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    reviewer_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    self_answers: Mapped[dict] = mapped_column(JSON, default=dict)
+    manager_answers: Mapped[dict] = mapped_column(JSON, default=dict)
+    self_done_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    manager_done_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    shared_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)  # the person can see the manager's side
+    overall: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+
+class Goal(Base):
+    __tablename__ = "goals"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    title: Mapped[str] = mapped_column(String(300))
+    description: Mapped[str] = mapped_column(Text, default="")
+    due: Mapped[date | None] = mapped_column(Date, nullable=True)
+    progress: Mapped[int] = mapped_column(Integer, default=0)  # 0-100
+    status: Mapped[str] = mapped_column(String(20), default="open")  # open | done | dropped
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class Survey(Base):
+    """Staff pulse / eNPS surveys. Answers are anonymous unless the survey says otherwise."""
+    __tablename__ = "surveys"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    title: Mapped[str] = mapped_column(String(200))
+    questions: Mapped[list] = mapped_column(JSON, default=list)  # [{key, label, type: enps|rating|text|choice, options}]
+    anonymous: Mapped[bool] = mapped_column(Boolean, default=True)
+    audience: Mapped[str] = mapped_column(String(20), default="all")  # all | field | office
+    status: Mapped[str] = mapped_column(String(20), default="open")  # open | closed
+    closes: Mapped[date | None] = mapped_column(Date, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class SurveyInvite(Base):
+    """Who has answered, kept apart from the answers so anonymous answers can't be traced back."""
+    __tablename__ = "survey_invites"
+    __table_args__ = (UniqueConstraint("survey_id", "user_id"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    survey_id: Mapped[int] = mapped_column(ForeignKey("surveys.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    answered: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class SurveyResponse(Base):
+    __tablename__ = "survey_responses"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    survey_id: Mapped[int] = mapped_column(ForeignKey("surveys.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)  # blank when anonymous
+    department: Mapped[str] = mapped_column(String(50), default="")
+    answers: Mapped[dict] = mapped_column(JSON, default=dict)
+    month: Mapped[str] = mapped_column(String(7), default="")  # YYYY-MM only, no time stamp, so answers can't be matched to invites
+
+
+class JobOpening(Base):
+    __tablename__ = "job_openings"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    title: Mapped[str] = mapped_column(String(200))
+    department: Mapped[str] = mapped_column(String(50), default="")
+    employment_type: Mapped[str] = mapped_column(String(20), default="full_time")
+    location: Mapped[str] = mapped_column(String(200), default="Sunshine Coast")
+    pay: Mapped[str] = mapped_column(String(100), default="")
+    description: Mapped[str] = mapped_column(Text, default="")
+    questions: Mapped[list] = mapped_column(JSON, default=list)  # extra questions on the application form: [{key, label}]
+    status: Mapped[str] = mapped_column(String(20), default="open")  # draft | open | closed
+    hiring_manager_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class Candidate(Base):
+    __tablename__ = "candidates"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    opening_id: Mapped[int | None] = mapped_column(ForeignKey("job_openings.id", ondelete="SET NULL"), nullable=True, index=True)
+    name: Mapped[str] = mapped_column(String(200))
+    email: Mapped[str] = mapped_column(String(255), default="")
+    phone: Mapped[str] = mapped_column(String(50), default="")
+    stage: Mapped[str] = mapped_column(String(20), default="applied")  # applied | screen | interview | offer | hired | rejected
+    rating: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 1-5
+    source: Mapped[str] = mapped_column(String(50), default="careers page")
+    answers: Mapped[dict] = mapped_column(JSON, default=dict)
+    cover_note: Mapped[str] = mapped_column(Text, default="")
+    resume_key: Mapped[str] = mapped_column(String(500), default="")
+    resume_name: Mapped[str] = mapped_column(String(255), default="")
+    hired_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class CandidateNote(Base):
+    __tablename__ = "candidate_notes"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    candidate_id: Mapped[int] = mapped_column(ForeignKey("candidates.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    text: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class Announcement(Base):
+    __tablename__ = "announcements"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    title: Mapped[str] = mapped_column(String(200))
+    body: Mapped[str] = mapped_column(Text, default="")
+    audience: Mapped[str] = mapped_column(String(20), default="all")  # all | field | office
+    pinned: Mapped[bool] = mapped_column(Boolean, default=False)
+    expires: Mapped[date | None] = mapped_column(Date, nullable=True)
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class IssuedItem(Base):
+    """Company gear a person has: phone, laptop, tool kits, keys, fuel card, uniform."""
+    __tablename__ = "issued_items"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    item: Mapped[str] = mapped_column(String(200))
+    serial: Mapped[str] = mapped_column(String(100), default="")
+    value: Mapped[float | None] = mapped_column(Float, nullable=True)
+    issued: Mapped[date | None] = mapped_column(Date, nullable=True)
+    returned: Mapped[date | None] = mapped_column(Date, nullable=True)
+    notes: Mapped[str] = mapped_column(Text, default="")
+
+
+class EmployeeFile(Base):
+    """Private files on a person's record (contract, tax form scan, warnings). Kept apart from company documents."""
+    __tablename__ = "employee_files"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    folder: Mapped[str] = mapped_column(String(50), default="General")  # Contract | Licences | Performance | Medical | General
+    filename: Mapped[str] = mapped_column(String(255))
+    key: Mapped[str] = mapped_column(String(500))
+    mime: Mapped[str] = mapped_column(String(100), default="")
+    size: Mapped[int] = mapped_column(Integer, default=0)
+    employee_can_see: Mapped[bool] = mapped_column(Boolean, default=True)
+    uploaded_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+# --- Boards (boards.py): the Monday.com side ---
+class Board(Base):
+    __tablename__ = "boards"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(200))
+    description: Mapped[str] = mapped_column(Text, default="")
+    owner_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    private: Mapped[bool] = mapped_column(Boolean, default=False)  # only members (and admins) can see it
+    members: Mapped[list] = mapped_column(JSON, default=list)  # user ids
+    job_id: Mapped[int | None] = mapped_column(ForeignKey("jobs.id", ondelete="SET NULL"), nullable=True, index=True)
+    template: Mapped[str] = mapped_column(String(50), default="")
+    archived: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class BoardColumn(Base):
+    __tablename__ = "board_columns"
+    __table_args__ = (UniqueConstraint("board_id", "key"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    board_id: Mapped[int] = mapped_column(ForeignKey("boards.id", ondelete="CASCADE"), index=True)
+    key: Mapped[str] = mapped_column(String(40))
+    title: Mapped[str] = mapped_column(String(100))
+    # text | long_text | status | person | date | timeline | number | money | dropdown | checkbox | rating | progress
+    # | job | customer | link | phone | email | time | tags | files
+    type: Mapped[str] = mapped_column(String(20))
+    settings: Mapped[dict] = mapped_column(JSON, default=dict)  # labels [{key, label, colour, done}], options, unit
+    position: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class BoardGroup(Base):
+    __tablename__ = "board_groups"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    board_id: Mapped[int] = mapped_column(ForeignKey("boards.id", ondelete="CASCADE"), index=True)
+    title: Mapped[str] = mapped_column(String(100))
+    colour: Mapped[str] = mapped_column(String(10), default="#579bfc")
+    position: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class BoardItem(Base):
+    __tablename__ = "board_items"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    board_id: Mapped[int] = mapped_column(ForeignKey("boards.id", ondelete="CASCADE"), index=True)
+    group_id: Mapped[int | None] = mapped_column(ForeignKey("board_groups.id", ondelete="SET NULL"), nullable=True, index=True)
+    parent_id: Mapped[int | None] = mapped_column(ForeignKey("board_items.id", ondelete="CASCADE"), nullable=True, index=True)  # subitem
+    name: Mapped[str] = mapped_column(String(300))
+    values: Mapped[dict] = mapped_column(JSON, default=dict)  # {column key: value}
+    depends_on: Mapped[list] = mapped_column(JSON, default=list)  # item ids that must finish first (timeline)
+    position: Mapped[float] = mapped_column(Float, default=0.0)
+    archived: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class ItemUpdate(Base):
+    """The conversation on an item: updates, replies and @mentions."""
+    __tablename__ = "item_updates"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    item_id: Mapped[int] = mapped_column(ForeignKey("board_items.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    reply_to: Mapped[int | None] = mapped_column(ForeignKey("item_updates.id", ondelete="CASCADE"), nullable=True)
+    body: Mapped[str] = mapped_column(Text)
+    mentions: Mapped[list] = mapped_column(JSON, default=list)
+    liked_by: Mapped[list] = mapped_column(JSON, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class ItemFile(Base):
+    __tablename__ = "item_files"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    item_id: Mapped[int] = mapped_column(ForeignKey("board_items.id", ondelete="CASCADE"), index=True)
+    filename: Mapped[str] = mapped_column(String(255))
+    key: Mapped[str] = mapped_column(String(500))
+    mime: Mapped[str] = mapped_column(String(100), default="")
+    size: Mapped[int] = mapped_column(Integer, default=0)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class ItemActivity(Base):
+    """Activity log: who changed which column, from what to what."""
+    __tablename__ = "item_activity"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    item_id: Mapped[int] = mapped_column(ForeignKey("board_items.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)  # blank = an automation
+    what: Mapped[str] = mapped_column(String(100))
+    old: Mapped[str] = mapped_column(Text, default="")
+    new: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class BoardAutomation(Base):
+    """When <trigger> then <actions>, e.g. when Status changes to Done, notify the owner and move the item to Done."""
+    __tablename__ = "board_automations"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    board_id: Mapped[int] = mapped_column(ForeignKey("boards.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(200), default="")
+    trigger: Mapped[dict] = mapped_column(JSON, default=dict)
+    actions: Mapped[list] = mapped_column(JSON, default=list)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    runs: Mapped[int] = mapped_column(Integer, default=0)
+    last_run: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error: Mapped[str] = mapped_column(Text, default="")
+
+
+class BoardView(Base):
+    __tablename__ = "board_views"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    board_id: Mapped[int] = mapped_column(ForeignKey("boards.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(100))
+    type: Mapped[str] = mapped_column(String(20), default="table")  # table | kanban | calendar | timeline | workload | chart
+    settings: Mapped[dict] = mapped_column(JSON, default=dict)  # {column, filter: {person, status, text}, sort}
+
+
+class BoardForm(Base):
+    """A form that adds an item to a board; can be public (customers, subbies) or staff only."""
+    __tablename__ = "board_forms"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    board_id: Mapped[int] = mapped_column(ForeignKey("boards.id", ondelete="CASCADE"), index=True)
+    token: Mapped[str] = mapped_column(String(40), unique=True, index=True)
+    title: Mapped[str] = mapped_column(String(200))
+    intro: Mapped[str] = mapped_column(Text, default="")
+    columns: Mapped[list] = mapped_column(JSON, default=list)  # column keys on the form
+    group_id: Mapped[int | None] = mapped_column(ForeignKey("board_groups.id", ondelete="SET NULL"), nullable=True)
+    public: Mapped[bool] = mapped_column(Boolean, default=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+# --- Estimating workbook (estimating.py): the CostX / CANDY side ---
+class Resource(Base):
+    """A priced resource: a labour grade, a machine, a material, a subcontract rate. Change it and every build-up follows."""
+    __tablename__ = "resources"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    code: Mapped[str] = mapped_column(String(50), unique=True)
+    kind: Mapped[str] = mapped_column(String(20), default="material")  # labour | plant | material | subcontract | other
+    description: Mapped[str] = mapped_column(String(300), default="")
+    unit: Mapped[str] = mapped_column(String(20), default="ea")
+    rate: Mapped[float] = mapped_column(Float, default=0.0)  # $ per unit, ex GST
+    supplier: Mapped[str] = mapped_column(String(100), default="")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class RateBuildup(Base):
+    """A rate built from resources, e.g. 1 m of 100 mm sewer in 1.2 m trench = 0.25 h plumber + 0.1 h excavator + 1.05 m pipe."""
+    __tablename__ = "rate_buildups"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    code: Mapped[str] = mapped_column(String(50), unique=True)
+    description: Mapped[str] = mapped_column(String(300), default="")
+    unit: Mapped[str] = mapped_column(String(20), default="m")
+    lines: Mapped[list] = mapped_column(JSON, default=list)  # [{resource: code, qty: per unit, waste_pct}]
+    notes: Mapped[str] = mapped_column(Text, default="")
+
+
+class EstimateVariable(Base):
+    """Named numbers used in workbook formulas: weeks on site, levels, units, supervisors..."""
+    __tablename__ = "estimate_variables"
+    __table_args__ = (UniqueConstraint("job_id", "name"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(40))
+    value: Mapped[float] = mapped_column(Float, default=0.0)
+    note: Mapped[str] = mapped_column(String(200), default="")
+
+
+class EstimateLine(Base):
+    """A workbook row: quantity typed, from a formula, or linked live to a take-off dimension; rate typed or built up."""
+    __tablename__ = "estimate_lines"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id", ondelete="CASCADE"), index=True)
+    section: Mapped[str] = mapped_column(String(100), default="General")  # Preliminaries, Sanitary drainage, Subcontract...
+    position: Mapped[float] = mapped_column(Float, default=0.0)
+    ref: Mapped[str] = mapped_column(String(30), default="")
+    description: Mapped[str] = mapped_column(String(500))
+    qty_source: Mapped[str] = mapped_column(String(10), default="manual")  # manual | formula | takeoff
+    qty: Mapped[float] = mapped_column(Float, default=0.0)
+    formula: Mapped[str] = mapped_column(String(500), default="")  # uses variables, and q = the linked take-off quantity
+    dimension: Mapped[str] = mapped_column(String(200), default="")  # take-off key, e.g. run:SAN:100:PVC or count:SAN:WC
+    uom: Mapped[str] = mapped_column(String(20), default="item")
+    rate_source: Mapped[str] = mapped_column(String(10), default="manual")  # manual | buildup | resource
+    rate_code: Mapped[str] = mapped_column(String(50), default="")
+    # unit costs per category when typed (buildup / resource fill these in when priced)
+    labour_hours: Mapped[float] = mapped_column(Float, default=0.0)
+    labour_rate: Mapped[float] = mapped_column(Float, default=0.0)
+    material: Mapped[float] = mapped_column(Float, default=0.0)
+    plant: Mapped[float] = mapped_column(Float, default=0.0)
+    subcontract: Mapped[float] = mapped_column(Float, default=0.0)
+    margin_pct: Mapped[float | None] = mapped_column(Float, nullable=True)  # blank = the job's margin for its service / stage
+    service_id: Mapped[int | None] = mapped_column(ForeignKey("services.id"), nullable=True)
+    stage_id: Mapped[int | None] = mapped_column(ForeignKey("stages.id"), nullable=True)
+    package_id: Mapped[int | None] = mapped_column(ForeignKey("trade_packages.id", ondelete="SET NULL"), nullable=True)
+    note: Mapped[str] = mapped_column(Text, default="")
+
+
+class TradePackage(Base):
+    """A subcontract or supply package sent out for quotes, then levelled and awarded (subcontractor comparison)."""
+    __tablename__ = "trade_packages"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(200))  # Concrete cutting, Excavation, Fire services, Hot water supply
+    kind: Mapped[str] = mapped_column(String(15), default="subcontract")  # subcontract | supply
+    scope: Mapped[str] = mapped_column(Text, default="")
+    due: Mapped[date | None] = mapped_column(Date, nullable=True)
+    status: Mapped[str] = mapped_column(String(15), default="open")  # open | awarded
+    awarded_quote_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    section: Mapped[str] = mapped_column(String(100), default="Subcontract")
+    stage_id: Mapped[int | None] = mapped_column(ForeignKey("stages.id"), nullable=True)
+    margin_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+
+class PackageQuote(Base):
+    __tablename__ = "package_quotes"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    package_id: Mapped[int] = mapped_column(ForeignKey("trade_packages.id", ondelete="CASCADE"), index=True)
+    supplier_id: Mapped[int | None] = mapped_column(ForeignKey("suppliers.id"), nullable=True)
+    company: Mapped[str] = mapped_column(String(200))
+    email: Mapped[str] = mapped_column(String(255), default="")
+    status: Mapped[str] = mapped_column(String(15), default="invited")  # invited | received | declined
+    amount: Mapped[float | None] = mapped_column(Float, nullable=True)  # their price ex GST
+    adjustments: Mapped[list] = mapped_column(JSON, default=list)  # levelling: [{description, amount}] for what they left out
+    exclusions: Mapped[str] = mapped_column(Text, default="")
+    valid_until: Mapped[date | None] = mapped_column(Date, nullable=True)
+    file_key: Mapped[str] = mapped_column(String(500), default="")
+    file_name: Mapped[str] = mapped_column(String(255), default="")
+    notes: Mapped[str] = mapped_column(Text, default="")
+    invited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    received_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class EstimateSnapshot(Base):
+    """A saved copy of the priced estimate, to compare versions (CostX revisions / CANDY estimate versions)."""
+    __tablename__ = "estimate_snapshots"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id", ondelete="CASCADE"), index=True)
+    label: Mapped[str] = mapped_column(String(100))
+    summary: Mapped[dict] = mapped_column(JSON, default=dict)
+    lines: Mapped[list] = mapped_column(JSON, default=list)  # [{key, section, description, qty, uom, cost, sell}]
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class TenderProgramme(Base):
+    """The tender programme: when each stage happens, so the estimate can be spread into a cash flow."""
+    __tablename__ = "tender_programmes"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id", ondelete="CASCADE"), unique=True)
+    start: Mapped[date] = mapped_column(Date)
+    retention_pct: Mapped[float] = mapped_column(Float, default=5.0)
+    retention_cap_pct: Mapped[float] = mapped_column(Float, default=5.0)  # of the contract sum
+    terms_days: Mapped[int] = mapped_column(Integer, default=30)
+    pay_suppliers_days: Mapped[int] = mapped_column(Integer, default=30)
+    activities: Mapped[list] = mapped_column(JSON, default=list)  # [{name, stages: [...], sections: [...], start_week, weeks, curve}]

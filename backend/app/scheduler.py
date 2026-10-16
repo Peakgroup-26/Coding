@@ -1,4 +1,4 @@
-"""Background jobs, once a minute: send due messages, push to Xero, and the daily / monthly reminders.
+"""Background jobs, once a minute: send due messages, push to Xero, board automations, and the daily / monthly reminders.
 
 Each job runs in its own database session and its own try block, so one failing never stops the others.
 Every few rounds the full Xero sync runs (payments, bills, bank balance). Off when BACKGROUND_TASKS=0.
@@ -43,15 +43,22 @@ def forgot_to_clock_out(db) -> None:
                    key=f"forgot-{e.id}-{a.id}")
 
 
+_last_daily: datetime | None = None
+
+
 def tick(full_xero: bool | None = None) -> None:
-    global _last_full_xero
-    from . import crm, plant, xero
+    global _last_full_xero, _last_daily
+    from . import boards, crm, hr, plant, xero
 
     now = datetime.now(timezone.utc)
+    if _last_daily is None or now - _last_daily >= timedelta(hours=1):  # licence reminders and leavers: hourly is plenty
+        _last_daily = now
+        _run("hr.daily", lambda db: hr.daily(db))
     _run("crm.send", crm.send_due)
     _run("crm.monthly", lambda db: crm.monthly(db))
     _run("plant.reminders", lambda db: plant.monthly_reminders(db))
     _run("clock", forgot_to_clock_out)
+    _run("boards", lambda db: boards.scheduled(db))
     if full_xero is None:
         full_xero = _last_full_xero is None or now - _last_full_xero >= timedelta(minutes=config.XERO_SYNC_MINUTES)
     if full_xero:

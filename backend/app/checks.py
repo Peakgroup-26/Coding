@@ -210,6 +210,14 @@ def find_problems(db: Session, job_id: int) -> list[Finding]:
             out.append(Finding("missing_price", f"missing:{code}", "error",
                                f"Code '{code}' is mapped but isn't in the price book. This blocks sign-off."))
 
+    # Workbook rows whose formula, take-off link or rate doesn't work
+    from .estimating import priced_lines
+
+    for w in priced_lines(db, job):
+        if w["error"]:
+            out.append(Finding("workbook", f"workbook:{w['id']}", "error",
+                               f"Workbook row '{w['description']}' ({w['section']}): {w['error']}. This blocks sign-off."))
+
     # Fittings not generated yet, or out of date
     has_rules = db.scalar(select(Rule.id).where(Rule.active.is_(True)).limit(1)) is not None
     has_generated = db.scalar(select(GeneratedItem.id).where(GeneratedItem.job_id == job_id, GeneratedItem.rule_id.is_not(None)).limit(1)) is not None
