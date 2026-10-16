@@ -491,3 +491,16 @@ def test_documents_items_diary_assets_and_maintenance(client):
 
 def test_scheduler_tick_runs(client):
     scheduler.tick(full_xero=False)  # nothing to do, and nothing breaks
+
+
+def test_photos_on_a_job_without_being_clocked_in(client):
+    job = _job(client, "Photo job", customer_name="Photo Co")
+    _uid, h = _user(client, "photographer@test.local", role="field")
+    assert client.get("/api/field/today", headers=h).json()["current"] is None
+    ids = [_photo(client, h, f"site{i}.jpg", job_id=job["id"]) for i in range(3)]
+    docs = client.get(f"/api/field/jobs/{job['id']}", headers=h).json()["documents"]
+    assert {d["id"] for d in docs if d["folder"] == "Photos" and d["is_image"]} >= set(ids)
+    assert client.get(f"/api/field/documents/{ids[0]}", headers=h).content == PNG
+    # and the office sees them in the job's documents
+    office = client.get(f"/api/jobs/{job['id']}/docs").json()["documents"]
+    assert sum(1 for d in office if d["folder"] == "Photos") == 3

@@ -596,3 +596,9 @@ button.danger.big-btn { background: var(--bad); color: #fff; border-color: var(-
 .topbar .ask-panel button.link, .topbar .bell-menu button.link { color: var(--accent); }
 .field-top .ask-label { display: none; } .field-top .ask-btn { padding: 4px 10px; }
 .photo-row > *, .photo-btn, .photo-btn button { min-width: 0; box-sizing: border-box; } .photo-btn span { overflow-wrap: anywhere; }
+.job-photos { display: flex; flex-direction: column; gap: 8px; }
+.photo-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.photo-grid button { padding: 0 !important; aspect-ratio: 1; overflow: hidden; border-radius: 8px; background: #e9edf3; display: flex; align-items: center; justify-content: center; min-width: 0; }
+.photo-grid img { width: 100%; height: 100%; object-fit: cover; }
+.photo-view { position: fixed; inset: 0; z-index: 60; background: rgba(0,0,0,.92); display: flex; flex-direction: column; align-items: center; justify-content: center; color: #fff; gap: 10px; }
+.photo-view img { max-width: 100%; max-height: 85vh; }

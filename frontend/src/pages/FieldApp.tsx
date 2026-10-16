@@ -1,12 +1,12 @@
 /* The phone app for the team on the tools (QuickBooks Workforce / Simpro Mobile / Plant Assessor style):
    Today (clock in and out, switch jobs, breaks), Jobs, Schedule, Pre-start (plant and vehicles), Timesheet,
    and Crew for supervisors. Punches made without reception are kept on the phone and sent when it's back online. */
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { Link, NavLink, Route, Routes, useNavigate, useParams } from "react-router-dom";
-import { api, ApiError, fetchBlobUrl } from "../api";
+import { api, ApiError, fetchBlobUrl, upload } from "../api";
 import { useApp } from "../App";
 import { AskPeakButton } from "./AskPeak";
-import { addDays, DocOut, ErrorLine, fmtDay, getLocation, hrs, monday, num, PhotoButton, SignaturePad, todayIso, useAction, useLoad } from "../ui";
+import { addDays, DocOut, ErrorLine, fmtDay, getLocation, shrinkImage, hrs, monday, num, PhotoButton, SignaturePad, todayIso, useAction, useLoad } from "../ui";
 
 interface Entry { id: number; job_id: number | null; job_no: string; job: string; task: string; start_at: string; end_at: string | null; local_day: string;
   start_local: string; end_local: string | null; hours: number; break_minutes: number; on_break: boolean; status: string; notes: string; flags: string[]; source: string }
@@ -135,6 +135,7 @@ function TodayTab({ onQueued }: { onQueued: () => void }) {
             <div className="small">{cur.on_break ? "On a break" : "Clocked in"} since {cur.start_local}</div>
             <div className="big">{timer}</div>
             <div><b>{cur.job_no} {cur.job || "No job"}</b>{cur.task && <> · {cur.task}</>}</div>
+            {cur.job_id && <Link to={`/field/jobs/${cur.job_id}`} className="small">📷 Photos and job details ›</Link>}
             {t.end_needs.map((n) => <p key={n} className="warn small">{n} <Link to="/field/prestart">Pre-start ›</Link></p>)}
             <div className="clock-actions">
               <button onClick={() => setPicking("switch")} disabled={busy}>Switch job</button>
@@ -271,13 +272,14 @@ function FieldJob() {
         {phone && <a className="btn" href={`tel:${phone.replace(/\s/g, "")}`}>📞 Call</a>}
       </div>
       {j.address && <p>{j.address}</p>}
+      <JobPhotos jobId={j.id} photos={j.documents.filter((d) => d.is_image && d.folder === "Photos")} onAdded={reload} />
       {j.description && <section className="card"><h3>The job</h3><p className="pre">{j.description}</p></section>}
       {(j.access_notes || j.site_contact || j.contact) && (
         <section className="card"><h3>Site</h3>{j.access_notes && <p className="pre">{j.access_notes}</p>}
           {(j.site_contact || j.contact) && <p className="small">Contact: {j.site_contact || j.contact}</p>}</section>
       )}
       <div className="grid-buttons">
-        <button onClick={() => setPanel("note")}>📝 Note / photo</button>
+        <button onClick={() => setPanel("note")}>📝 Note</button>
         <button onClick={() => setPanel("material")}>🔩 Materials used</button>
         <button onClick={() => setPanel("po")}>🧾 Get a PO number</button>
         <button onClick={() => setPanel("form")}>✅ Forms & SWMS</button>
@@ -291,9 +293,9 @@ function FieldJob() {
       ))}
       {panel === "complete" && <CompleteForm jobId={j.id} onDone={done} />}
       {j.completed && <p className="ok">✓ Completed{j.signed_by_name && <> · signed by {j.signed_by_name}</>}</p>}
-      {j.documents.length > 0 && (
+      {j.documents.some((d) => !(d.is_image && d.folder === "Photos")) && (
         <section><h2>Plans and documents</h2>
-          {j.documents.map((d) => <button key={d.id} className="job-tile" onClick={() => openDoc(d)}>{d.is_image ? "🖼" : "📄"} {d.title || d.filename} <span className="small muted">{d.folder}</span></button>)}
+          {j.documents.filter((d) => !(d.is_image && d.folder === "Photos")).map((d) => <button key={d.id} className="job-tile" onClick={() => openDoc(d)}>{d.is_image ? "🖼" : "📄"} {d.title || d.filename} <span className="small muted">{d.folder}</span></button>)}
         </section>
       )}
       {j.pos.length > 0 && <section><h2>Purchase orders</h2>{j.pos.map((p) => <div key={p.po_no} className="note-row"><b>{p.po_no}</b> {p.supplier} <span className="muted small">{p.status}</span></div>)}</section>}
@@ -656,5 +658,69 @@ function CrewTab() {
         <button disabled={busy || !sel.length} onClick={() => go(true)}>Clock off</button></div>
       {msg && <p className="ok small">{msg}</p>}<ErrorLine error={error} />
     </div>
+  );
+}
+
+
+/** Photos on a job: take them with the camera or pick several from the gallery, clocked in or not. */
+function JobPhotos({ jobId, photos, onAdded }: { jobId: number; photos: DocOut[]; onAdded: () => void }) {
+  const camera = useRef<HTMLInputElement>(null);
+  const gallery = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState("");
+  const [error, setError] = useState("");
+  const [thumbs, setThumbs] = useState<Record<number, string>>({});
+  const [open, setOpen] = useState<string>("");
+  useEffect(() => {
+    let live = true;
+    photos.filter((p) => !thumbs[p.id]).slice(0, 30).forEach(async (p) => {
+      try { const url = await fetchBlobUrl(`/api/field/documents/${p.id}`); if (live) setThumbs((t) => ({ ...t, [p.id]: url })); } catch { /* skip */ }
+    });
+    return () => { live = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [photos.map((p) => p.id).join(",")]);
+  const send = async (files: FileList | null) => {
+    const list = Array.from(files ?? []).filter((f) => f.type.startsWith("image/"));
+    if (!list.length) return;
+    setError("");
+    let done = 0;
+    for (const f of list) {
+      setBusy(`Uploading ${done + 1} of ${list.length}…`);
+      try {
+        const blob = await shrinkImage(f);
+        const form = new FormData();
+        form.append("file", new File([blob], f.name.replace(/\.\w+$/, "") + ".jpg", { type: "image/jpeg" }));
+        form.append("job_id", String(jobId));
+        form.append("folder", "Photos");
+        await upload("/api/field/upload", form);
+        done++;
+      } catch (e) { setError(`${f.name}: ${(e as Error).message}`); }
+    }
+    setBusy("");
+    if (camera.current) camera.current.value = "";
+    if (gallery.current) gallery.current.value = "";
+    if (done) onAdded();
+  };
+  return (
+    <section className="job-photos">
+      <div className="row"><h2 style={{ margin: 0 }}>Photos {photos.length > 0 && <span className="muted small">({photos.length})</span>}</h2></div>
+      <div className="action-row">
+        <button type="button" className="btn primary" disabled={!!busy} onClick={() => camera.current?.click()}>📷 Take photo</button>
+        <button type="button" className="btn" disabled={!!busy} onClick={() => gallery.current?.click()}>🖼 Add from gallery</button>
+      </div>
+      <input ref={camera} type="file" accept="image/*" capture="environment" hidden onChange={(e) => send(e.target.files)} />
+      <input ref={gallery} type="file" accept="image/*" multiple hidden onChange={(e) => send(e.target.files)} />
+      {busy && <p className="small">{busy}</p>}
+      {error && <p className="error small">{error}</p>}
+      {photos.length > 0 && (
+        <div className="photo-grid">
+          {photos.map((p) => (
+            <button key={p.id} type="button" onClick={() => thumbs[p.id] && setOpen(thumbs[p.id])} aria-label={p.title || p.filename}>
+              {thumbs[p.id] ? <img src={thumbs[p.id]} alt="" /> : <span className="muted small">…</span>}
+            </button>
+          ))}
+        </div>
+      )}
+      {open && <div className="photo-view" onClick={() => setOpen("")}><img src={open} alt="" /><span>Tap to close</span></div>}
+    </section>
   );
 }
