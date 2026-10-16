@@ -175,11 +175,12 @@ def comparison(db: Session, group: str = "", only_multi: bool = True, since: dat
         qty = sum(bought.get((p.supplier_id, p.code), 0.0) for p in ranked)
         spent = sum(bought.get((p.supplier_id, p.code), 0.0) * p.price for p in ranked)
         saving = max(0.0, spent - qty * best.price)
-        g = best.group or "(no group)"
+        g = next((p.group for p in ranked if p.group), "") or "(no group)"
         groups[g]["products"] += 1
         groups[g]["wins"][sups.get(best.supplier_id, "")] += 1
         groups[g]["saving"] += saving
-        rows.append({"product_key": key, "description": best.description or ranked[-1].description, "brand": best.brand, "group": g,
+        rows.append({"product_key": key, "description": best.description or ranked[-1].description,
+                     "brand": next((p.brand for p in ranked if p.brand), ""), "group": g,
                      "unit": best.unit, "cheapest_supplier": sups.get(best.supplier_id, ""), "cheapest_supplier_id": best.supplier_id,
                      "cheapest_price": best.price, "highest_price": worst.price,
                      "spread_pct": round(100 * (worst.price - best.price) / worst.price, 1) if worst.price else 0.0,

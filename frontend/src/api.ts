@@ -34,7 +34,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     let msg = res.statusText;
     try {
       const j = await res.json();
-      msg = typeof j.detail === "string" ? j.detail : JSON.stringify(j.detail);
+      msg = typeof j.detail === "string" ? j.detail : j.detail?.message ?? JSON.stringify(j.detail);
     } catch { /* not JSON */ }
     throw new ApiError(res.status, msg);
   }

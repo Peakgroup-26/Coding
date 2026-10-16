@@ -72,7 +72,12 @@ If Plesk shows an error when saving, use **Docker → Docker Proxy Rules** on th
 ## 5. Sign in
 
 Go to **https://takeoff.peakgroupdashboard.com.au** and sign in with the email and password from step 3c.
-Then change your password (**More → Admin settings → Users → Reset password**) and add your estimators there.
+Then change your password (**My account**) and add your team in **Admin → People & permissions**. Give the
+people on the tools the **On the tools** role: they get only the phone app. Send them to
+**https://takeoff.peakgroupdashboard.com.au/field** on their phone and have them add it to their home screen.
+
+Then: connect Xero ([XERO.md](XERO.md)), set up email for customer follow-ups (`SMTP_...` in `.env`), and set your
+company name and Google review link in **Admin → Operations & plant**.
 
 ## Day to day
 

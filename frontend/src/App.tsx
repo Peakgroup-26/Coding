@@ -17,6 +17,20 @@ import JobReports from "./pages/JobReports";
 import Rules from "./pages/Rules";
 import PriceBooks from "./pages/PriceBooks";
 import Mappings from "./pages/Mappings";
+import { AskPeakButton, Bell } from "./pages/AskPeak";
+import FieldApp from "./pages/FieldApp";
+import FeedbackForm from "./pages/FeedbackForm";
+import WorkBoard from "./pages/WorkBoard";
+import JobHub from "./pages/JobHub";
+import Schedule from "./pages/Schedule";
+import Timesheets from "./pages/Timesheets";
+import Purchasing from "./pages/Purchasing";
+import PlantPage from "./pages/Plant";
+import Maintenance from "./pages/Maintenance";
+import CompanyDocs from "./pages/CompanyDocs";
+import Customers, { CustomerPage } from "./pages/Customers";
+import Crm from "./pages/Crm";
+import Finance from "./pages/Finance";
 
 interface Ctx { user: User; settings: Settings; reloadSettings: () => Promise<void> }
 const AppCtx = createContext<Ctx | null>(null);
@@ -29,6 +43,7 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [checked, setChecked] = useState(false);
+  const [menu, setMenu] = useState(false);
   const nav = useNavigate();
 
   const reloadSettings = async () => setSettings(await api.get<Settings>("/api/settings"));
@@ -48,10 +63,13 @@ export default function App() {
       .finally(() => setChecked(true));
   }, []);
 
-  const onLogin = async (u: User) => { setUser(u); await reloadSettings(); nav("/"); };
+  const onLogin = async (u: User) => { setUser(u); await reloadSettings(); nav(u.role === "field" ? "/field" : "/"); };
   const logout = () => { setToken(null); setUser(null); nav("/login"); };
 
   if (!checked) return null;
+  if (window.location.pathname.startsWith("/feedback/")) {
+    return <Routes><Route path="/feedback/:token" element={<FeedbackForm />} /></Routes>;
+  }
   if (!user || !settings) {
     return (
       <Routes>
@@ -59,30 +77,53 @@ export default function App() {
       </Routes>
     );
   }
+  if (user.role === "field") {
+    return (
+      <AppCtx.Provider value={{ user, settings, reloadSettings }}>
+        <Routes>
+          <Route path="/field/*" element={<FieldApp onLogout={logout} />} />
+          <Route path="*" element={<Navigate to="/field" />} />
+        </Routes>
+      </AppCtx.Provider>
+    );
+  }
+  const ops = can(user, "can_ops");
+  const fin = can(user, "can_finance");
+  const groups: { label: string; links: [string, string, boolean][] }[] = [
+    { label: "Estimating", links: [["/", "Tenders & quotes", true], ["/sales", "Sales", true],
+      ["/civil-rates", "Civil rates", can(user, "can_past_rates") && can(user, "can_civil")],
+      ["/price-books", "Price books", can(user, "can_hydraulic")], ["/rules", "Fitting rules", can(user, "can_hydraulic")],
+      ["/mappings", "Price mappings", can(user, "can_hydraulic")], ["/jobs", "Jobs set up by hand", true]] },
+    { label: "Operations", links: [["/work", "Jobs", ops], ["/schedule", "Schedule", ops], ["/timesheets", "Timesheets", ops],
+      ["/purchasing", "Purchasing", ops], ["/plant", "Plant & vehicles", ops], ["/maintenance", "Maintenance planner", ops],
+      ["/documents", "Company documents", ops], ["/field", "Phone app", true]] },
+    { label: "Customers", links: [["/customers", "Customers", ops], ["/crm", "Feedback & follow-ups", ops]] },
+    { label: "Money", links: [["/finance", "Dashboard", fin], ["/finance?tab=wip", "WIP", fin], ["/finance?tab=cash", "Cash flow", fin],
+      ["/finance?tab=budget", "Budgets", fin], ["/finance?tab=invoices", "Invoices & debtors", fin],
+      ["/purchasing?tab=prices", "Supplier prices", fin], ["/reports", "Job reports", true]] },
+  ];
   return (
     <AppCtx.Provider value={{ user, settings, reloadSettings }}>
       <div className="app">
         <header className="topbar">
-          <Link to="/" className="brand">Peak Take-off</Link>
-          <nav>
-            <Link to="/">Home</Link>
-            {can(user, "can_past_rates") && can(user, "can_civil") && <Link to="/civil-rates">Civil rates</Link>}
-            {can(user, "can_hydraulic") && <Link to="/price-books">Price books</Link>}
-            <Link to="/sales">Sales</Link>
-            <Link to="/reports">Reports</Link>
-            {user.role === "admin" && <Link to="/admin">Admin portal</Link>}
-            <details className="more">
-              <summary>More</summary>
-              <div className="menu" onClick={(e) => (e.currentTarget.parentElement as HTMLDetailsElement).open = false}>
-                {can(user, "can_hydraulic") && <Link to="/rules">Fitting rules</Link>}
-                {can(user, "can_hydraulic") && <Link to="/mappings">Price mappings</Link>}
-                <Link to="/jobs">Jobs (set up by hand)</Link>
-                <Link to="/account">My account</Link>
-              </div>
-            </details>
+          <button className="burger" aria-label="Menu" onClick={() => setMenu(!menu)}>☰</button>
+          <Link to="/" className="brand">Peak</Link>
+          <nav className={menu ? "open" : ""} onClick={(e) => { if ((e.target as HTMLElement).tagName === "A") { setMenu(false); closeMenus(); } }}>
+            {groups.map((g) => g.links.some((l) => l[2]) && (
+              <details key={g.label} className="more">
+                <summary>{g.label}</summary>
+                <div className="menu">
+                  {g.links.filter((l) => l[2]).map(([to, label]) => <Link key={to} to={to}>{label}</Link>)}
+                </div>
+              </details>
+            ))}
+            {user.role === "admin" && <Link to="/admin">Admin</Link>}
+            <Link to="/account" className="nav-account">My account</Link>
           </nav>
           <span className="spacer" />
-          <Link to="/account" className="muted">{user.name || user.email} · {user.role}</Link>
+          <AskPeakButton />
+          <Bell />
+          <Link to="/account" className="muted who">{user.name || user.email}</Link>
           <button className="link" onClick={logout}>Sign out</button>
         </header>
         <Routes>
@@ -98,6 +139,20 @@ export default function App() {
           <Route path="/rules" element={<Rules />} />
           <Route path="/price-books" element={<PriceBooks />} />
           <Route path="/mappings" element={<Mappings />} />
+          <Route path="/work" element={<WorkBoard />} />
+          <Route path="/work/:jobId" element={<JobHub />} />
+          <Route path="/schedule" element={<Schedule />} />
+          <Route path="/timesheets" element={<Timesheets />} />
+          <Route path="/purchasing" element={<Purchasing />} />
+          <Route path="/plant" element={<PlantPage />} />
+          <Route path="/plant/:plantId" element={<PlantPage />} />
+          <Route path="/maintenance" element={<Maintenance />} />
+          <Route path="/documents" element={<CompanyDocs />} />
+          <Route path="/customers" element={<Customers />} />
+          <Route path="/customers/:customerId" element={<CustomerPage />} />
+          <Route path="/crm" element={<Crm />} />
+          <Route path="/finance" element={<Finance />} />
+          <Route path="/field/*" element={<FieldApp />} />
           <Route path="/admin" element={user.role === "admin" ? <AdminPortal /> : <Navigate to="/" />} />
           <Route path="/account" element={<Account />} />
           <Route path="*" element={<Navigate to="/" />} />
@@ -105,6 +160,10 @@ export default function App() {
       </div>
     </AppCtx.Provider>
   );
+}
+
+function closeMenus() {
+  document.querySelectorAll("details.more[open]").forEach((d) => d.removeAttribute("open"));
 }
 
 function sessionStorageSafe(key: string, value: string) {

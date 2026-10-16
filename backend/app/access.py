@@ -86,7 +86,7 @@ AREAS = [
     ("/api/files", "can_ops", None),
 ]
 # A job's delivery side (/api/jobs/12/costs and so on) needs can_ops as well as access to the job.
-JOB_OPS = re.compile(r"^/api/jobs/\d+/(costs|budget|variations|work|docs|items|diary|forms)\b")
+JOB_OPS = re.compile(r"^/api/jobs/\d+/(costs|budget|variations|work|docs|items|diary|forms|time)\b")
 
 # The only API paths a "field" user can reach.
 FIELD_PATHS = ("/api/field/", "/api/auth/", "/api/settings", "/api/assistant")

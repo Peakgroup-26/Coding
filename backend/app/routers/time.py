@@ -274,3 +274,24 @@ def decide_time_off(off_id: int, body: TimeOffDecision, db: Session = Depends(ge
     t.status, t.decided_by = body.status, user.id
     db.commit()
     return {"id": t.id, "status": t.status}
+
+
+@router.get("/jobs/{job_id}/time")
+def job_time(job_id: int, db: Session = Depends(get_db), _: User = Depends(current_user)):
+    """Every entry on a job, with hours by person and by task."""
+    from collections import defaultdict
+
+    get_or_404(db, Job, job_id)
+    names = {u.id: u.name or u.email for u in db.scalars(select(User))}
+    entries = list(db.scalars(select(TimeEntry).where(TimeEntry.job_id == job_id).order_by(TimeEntry.start_at.desc())))
+    by_person, by_task = defaultdict(float), defaultdict(float)
+    rows = []
+    for e in entries:
+        o = ts.entry_out(db, e)
+        rows.append({**o, "name": names.get(e.user_id, "")})
+        if e.status != "rejected":
+            by_person[names.get(e.user_id, "")] += o["hours"]
+            by_task[e.task or "(no task)"] += o["hours"]
+    return {"entries": rows[:500], "by_person": [{"name": k, "hours": round(v, 2)} for k, v in sorted(by_person.items(), key=lambda kv: -kv[1])],
+            "by_task": [{"task": k, "hours": round(v, 2)} for k, v in sorted(by_task.items(), key=lambda kv: -kv[1])],
+            "total": round(sum(by_person.values()), 2)}

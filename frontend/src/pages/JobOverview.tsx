@@ -6,6 +6,7 @@ import CivilBoqView from "./CivilBoq";
 import TenderDocs from "./TenderDocs";
 import ChatPanel from "./ChatPanel";
 import SalesPanel from "./SalesPanel";
+import { can, useApp } from "../App";
 
 const fmt = (n: number | undefined, dp = 0) => (n ?? 0).toLocaleString("en-AU", { maximumFractionDigits: dp, minimumFractionDigits: dp });
 
@@ -148,6 +149,7 @@ export default function JobOverview() {
       </div>
       {job.client && <p className="muted">{job.client}</p>}
       <SalesPanel job={job} onSaved={load} />
+      <LiveJobBanner job={job} />
 
       {running && <Progress st={st} />}
       {st.state === "failed" && <div className="card bad-card"><b>The read stopped with an error:</b> {st.error} <button onClick={() => rerun(false)}>Try again</button></div>}
@@ -235,5 +237,30 @@ export default function JobOverview() {
     </main>
     <ChatPanel jobId={jobId} kind={civil ? "civil" : "hydraulic"} onChanged={() => { setChanges((c) => c + 1); poll(); }} />
     </div>
+  );
+}
+
+
+/** Won quotes become live jobs (job number, budget from this estimate, on the schedule and the phones). */
+function LiveJobBanner({ job }: { job: Job }) {
+  const { user } = useApp();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  if (!can(user, "can_ops")) return null;
+  if (job.work_status) {
+    return <p className="live-banner">Live job <b>{job.job_no}</b> · <Link to={`/work/${job.id}`}>Open the job: schedule, time, costs, invoices ›</Link></p>;
+  }
+  if (job.sales_stage !== "won" && job.sales_stage !== "quote_sent") return null;
+  const start = async () => {
+    setBusy(true); setError("");
+    try { await api.post(`/api/jobs/${job.id}/start-work`); window.location.href = `/work/${job.id}`; } catch (e) { setError((e as Error).message); setBusy(false); }
+  };
+  return (
+    <p className="live-banner">
+      {job.sales_stage === "won" ? "Won it. " : "When it's won: "}
+      <button className="primary" disabled={busy} onClick={start}>Start the job</button>
+      <span className="small muted"> gives it a job number, a budget from this estimate, and puts it on the schedule and the team's phones.</span>
+      {error && <span className="error small"> {error}</span>}
+    </p>
   );
 }

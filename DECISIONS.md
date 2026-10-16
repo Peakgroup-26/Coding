@@ -233,3 +233,41 @@ These are choices made where the brief left room, as it asks. Each one can be re
 96. **Conversion is measured by cohort** (the leads that came in during the period and what became of them), so a period isn't flattered by wins from older leads. The win rate of quotes decided in the period is shown separately. Times are reported as average and median, because one slow job skews the average.
 
 97. **Sales details are picked from lists, not typed,** so the dashboard can group them: type of work per sector, rough size bands, lead source, lost reason. Lists are edited by an admin; a value no longer on a list stays on old jobs and still shows. Client and contact are drop-downs of the ones already used, plus "new". The real quote price is still typed: a band isn't a price.
+
+## Operations
+
+98. **One job record from lead to closed.** A won quote becomes a live job by getting a job number and a work status; nothing is
+copied. The estimate, sales fields and delivery records all hang off the same job, so the budget can come straight from the
+take-off and the reports can compare estimated to actual.
+
+99. **Everything financial is worked out from the records, never stored as totals.** Labour actual is clocked time × the
+person's cost rate (frozen when the time is approved); materials actual is billed POs (the bill), received POs (their value) and
+other costs; committed is POs sent but not received. Forecast final cost per category is the larger of its budget and actual +
+committed, unless someone sets % complete. So the WIP, the dashboard and Ask Peak can't disagree.
+
+100. **The month-to-date check is pro-rata by working days** (Queensland holidays and the Christmas shutdown from the reports
+calendar), against the monthly budget when one is set, otherwise against what the live jobs' remaining budgets say. 5% tolerance,
+adjustable.
+
+101. **Clock-ins are made safe for bad reception.** A punch carries the time it happened on the phone and an id; if it can't be
+sent it waits on the phone and is replayed later, and the server ignores a repeat of the same id. The server doesn't trust a
+phone time more than 24 hours old or in the future.
+
+102. **Switching jobs closes the open entry at the same instant.** A person has at most one open entry, so time is never double
+counted or lost.
+
+103. **The plant rules block clocking in rather than just warning,** because that's what was asked, but each rule can be switched
+off. Photos are required by the server, not just the form.
+
+104. **The CRM sends nothing until email or SMS is set up;** messages wait in the queue with the reason. Review links are only
+offered after a 9 or 10, and only by rules that ask for reviews, so commercial clients never get one.
+
+105. **Supplier products are matched across suppliers by manufacturer code, then barcode, then by a person linking them.** Matching
+by description guesses wrong too often to base buying decisions on.
+
+106. **Reece maX is loaded from its price file,** because Reece only gives direct access to approved partner software. Xero
+uses its OAuth2 with the granular scopes required for apps made after March 2026; tokens stay on the server.
+
+107. **Ask Peak only reads.** It answers from the same functions the pages use, and its tools respect the person's permissions
+(money tools need Finance). Changes are made on the pages, where they're recorded under the person's name.
+

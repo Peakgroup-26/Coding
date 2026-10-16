@@ -30,6 +30,9 @@ CLIENT_TYPES = {
 TRIGGERS = {"invoice_sent": "Any invoice sent", "final_invoice_sent": "Final / service invoice sent", "job_complete": "Job completed",
             "monthly": "Monthly check-in"}
 DEPARTMENTS = {"residential": "Residential", "commercial": "Commercial", "maintenance": "Maintenance", "civil": "Civil"}
+# Which department a customer's feedback counts towards when it isn't about a particular job.
+DEPT_FOR_TYPE = {"residential": "residential", "maintenance": "maintenance", "strata": "maintenance", "builder": "commercial",
+                 "commercial": "commercial", "government": "commercial", "civil": "civil", "other": "commercial"}
 RATINGS = {"quality": "Quality of work", "communication": "Communication", "timeliness": "On time", "cleanliness": "Tidy site",
            "value": "Value for money"}
 
@@ -111,7 +114,7 @@ def queue(db: Session, rule: CrmRule, c: Customer, job: Job | None, invoice: Inv
     fb = None
     if rule.ask_feedback or rule.ask_review:
         fb = Feedback(token=secrets.token_urlsafe(24), customer_id=c.id, job_id=job.id if job else None, kind=kind,
-                      department=ops.department(job) or ("civil" if c.kind == "civil" else "commercial" if kind == "monthly" else ""),
+                      department=ops.department(job) or DEPT_FOR_TYPE.get(c.kind, "commercial"),
                       period=period, contact_name=name)
         db.add(fb)
         db.flush()

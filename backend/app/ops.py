@@ -26,6 +26,8 @@ DEFAULTS = {
     "invoice_prefix": "INV-",
     "default_terms_days": 14,  # customer payment terms when the customer has none
     "default_cost_rate": 65.0,  # $/h for staff with no cost rate set
+    "default_charge_rate": 110.0,  # $/h charged on do-and-charge jobs
+    "charge_materials_markup_pct": 25.0,  # do-and-charge: materials and other costs marked up by this
     "civil_budget_margin_pct": 15.0,  # civil BOQs are priced at sell rates: budget = BOQ x (1 - this)
     "company_name": "Peak Plumbing & Gas Services",
     "google_review_url": "",

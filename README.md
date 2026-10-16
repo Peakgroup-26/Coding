@@ -1,10 +1,84 @@
-# Peak Hydraulic Take-off & Estimating
+# Peak: estimating, jobs, the team's phones and the money in one place
 
-A web app for Peak Plumbing & Gas Services that turns commercial hydraulic drawings into measured, staged quantities and a priced estimate, and civil plans into a bill of quantities priced from Peak's previous civil jobs. It follows the build brief "Hydraulic Take-off & Estimating System — Build Brief for Codex".
+A web app for Peak Plumbing & Gas Services. It runs the business from first enquiry to paid invoice: estimating and tendering,
+live jobs (maintenance to large commercial and civil), scheduling, the team clocking in on their phones, plant and vehicle
+pre-starts, purchasing and supplier pricing, invoicing through Xero, customer feedback, and budgets, WIP and cash flow.
+The estimating side turns commercial hydraulic drawings into measured, staged quantities and a priced estimate, and civil plans into a bill of quantities priced from Peak's previous civil jobs. It follows the build brief "Hydraulic Take-off & Estimating System — Build Brief for Codex".
 
-**Status: all five phases in the brief are built,** plus the autopilot ("drop the plans in") and the civil BOQ. They have been tested on generated drawings; tuning against Peak's real drawings and data comes next (see "Before going live").
+**Status:** the operations side (above) is built and tested with sample data. **Estimating: all five phases in the brief are built,** plus the autopilot ("drop the plans in") and the civil BOQ. They have been tested on generated drawings; tuning against Peak's real drawings and data comes next (see "Before going live").
 
 **Putting it on the Plesk server:** see [deploy/PLESK.md](deploy/PLESK.md).
+
+## Operations: from won quote to paid invoice
+
+Everything below is one system: a job won here is scheduled here, clocked onto from the phones, costed by its POs and time,
+invoiced through Xero, and rolled up into the WIP, the monthly forecast and the cash flow. Nothing is entered twice.
+
+**Jobs** (Operations → Jobs). A won quote becomes a live job with **Start the job**: it gets a job number (`J26-0001`), a
+customer and site record, and a budget from its estimate (labour hours and cost, materials, by stage). Maintenance and small
+jobs are raised straight away with **+ New job** (tap-to-pick: sector, customer, type of work, priority, do-and-charge or fixed).
+Each job's page has:
+- **Overview**: budget against actual against committed against forecast by category, % complete, forecast margin, earned,
+  invoiced, over / under billed, retention, and the job's details.
+- **Budget**, **Time** (every clock-in, by person and task, with where they clocked in), **POs & costs**, **Variations**
+  (approved ones add to the contract and the budget), **Invoices** (progress claims from % complete, or do-and-charge
+  from time and materials), **Documents** (folders, versions, which ones show on the phones), **RFIs & defects** (also site
+  instructions, incidents, inspections, observations, submittals; an RFI can become a variation), **Site diary** (who was on
+  site comes from the timesheets) and **Forms**.
+
+**Schedule** (Operations → Schedule). People down the side, days across. Click to book someone onto a job, drag to move,
+**Copy last week**, then **Publish** to put it on their phones. Leave shows on the board. "On the clock now" shows who's working where.
+
+**The phone app** (`/field`, add it to the home screen). The team's "On the tools" logins only get this:
+- **Today**: clock in (today's scheduled jobs first), switch jobs, breaks, clock out, with location. No reception? The punch is
+  kept on the phone and sent when it's back, with the time it really happened.
+- **Jobs**: address and directions, call the contact, scope and site notes, plans and documents, notes and photos, materials
+  used, **get a PO number** at the trade counter, forms and SWMS, and **Job finished** with the customer's signature.
+- **Schedule**, **Timesheet** (submit the week, add a missed clock-in, ask for leave), and **Crew** for supervisors (clock a
+  crew on or off together).
+- **Pre-start** (Plant Assessor style), with rules that can each be switched off in Admin → Operations & plant:
+  - a company vehicle's driver can't clock in each week until that week's vehicle pre-start is done (with photos)
+  - operating a machine needs that day's pre-start with photos of the machine and the fuel gauge, and clocking off needs
+    the end-of-day photos
+  - a failed pre-start item or reported damage goes to the supervisors; a critical defect takes the machine out of service
+  - each driver is reminded monthly to wash their vehicle and send photos of the outside and inside
+  - plant hours on a job are charged to it at the machine's hire rate
+
+**Timesheets** (Operations → Timesheets). Everyone's week with ordinary and overtime, flags for long shifts, hand-added and
+edited time; approve a week (this fixes the cost rate used for job costing), fix entries (a reason is kept), payroll export, leave.
+
+**Purchasing.** POs on jobs or for stock (`J26-0001-PO3`), print to send, enter or match bills (a bill more than 2% off its PO
+is flagged), suppliers and their terms. **Supplier price files:** load each supplier's monthly price list (Reece maX download,
+CSV or Excel from anyone else); columns are found by their headings and remembered. **Cheapest supplier** compares every product
+sold by two or more suppliers (matched by manufacturer code or barcode), by product line, with what switching would have saved
+on the last 12 months' POs, and can make a new price-book version at the cheapest prices.
+
+**Plant & vehicles** and the **Maintenance planner** (assets on customers' sites with service intervals: backflow devices,
+TMVs, hot water, grease traps. Due ones become one service job per site; filling in the test report moves the next due date on).
+
+**Customers and feedback** (Customers). Each customer has a type, contacts, sites, jobs, money owed, NPS and a timeline of calls,
+notes, tasks and messages. **Feedback & follow-ups** sends what you set per type of customer: e.g. homeowners and maintenance
+customers get thanks and a feedback link 2 days after the invoice, and happy ones (9-10) are offered your Google review link;
+builders get feedback after the final invoice; commercial and civil clients get a "how did we go this month?" check-in. Answers
+come back as NPS by department, client type, customer and month. A score of 6 or less alerts the admins and puts a call-back
+task on the customer.
+
+**Money** (Money → Dashboard). **This month so far** against the forecast pro-rated to today by working days, for revenue,
+labour, materials and subcontractors, red when costs run more than 5% ahead (or revenue behind), with the jobs behind it.
+**WIP**, **cash flow** for the next 13 weeks (invoices on their due dates, work still to bill, wages from the schedule,
+supplier bills on their terms, overheads), **budgets** by month (start them from what the live jobs say), **invoices and
+aged debtors**.
+
+**Xero.** Invoices go to Xero; payments, supplier bills (matched to POs and jobs by number) and the bank balance come back.
+Set up in [deploy/XERO.md](deploy/XERO.md).
+
+**Ask Peak** (the ✦ button on every page, and on the phones). Type or talk: "how many labour hours on the Maroochydore
+Apartments job, actual vs estimated?", "which jobs are going over budget?", "who's working right now?", "which supplier is
+cheapest for PVC fittings?". It looks it up in the live records and makes the report, downloadable as Excel. It can only read,
+and only what the person asking is allowed to see.
+
+**Permissions.** Two more ticks in Admin → People: **Operations** (jobs, schedule, timesheets, purchasing, plant, customers)
+and **Finance** (WIP, budgets, cash flow, invoices, supplier prices, Xero). The **On the tools** role gets only the phone app.
 
 ## Drop the plans in (autopilot)
 
@@ -389,6 +463,17 @@ backend/app/
   reports.py          material lists, labour, crew, programs, cash flow, dashboard
   reports_export.py   the reports workbook
   sales.py            sectors, the lead-to-job pipeline, the sales dashboard
+  ops.py              live jobs: job numbers, customers and sites, budgets from the estimate
+  timesheets.py       clocking in and out, breaks, overtime, approvals, the schedule
+  plant.py            plant and vehicle pre-starts, photos, defects, clock-in rules, wash reminders
+  purchasing.py       POs, variations, invoices, aged debtors
+  project.py          documents, RFIs and defects, forms, assets and the maintenance planner
+  finance.py          job budget vs actual, WIP, month-to-date vs forecast, cash flow
+  crm.py, messaging.py  follow-up rules, feedback and NPS; email and SMS
+  supplier_prices.py  supplier price files, matching products, cheapest supplier
+  xero.py             the Xero connection and sync
+  assistant.py        Ask Peak, the company-wide assistant
+  scheduler.py        background jobs: messages, reminders, Xero sync
   revision.py         revision compare
   markup.py           marked-up PDF
   sso.py              Microsoft 365 sign-on
