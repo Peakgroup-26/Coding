@@ -52,8 +52,8 @@ def test_check_measure_on_faulty_job(client):
     assert {f["sheet_id"] for f in by_type["scale_mismatch"]} <= {a["id"], bsheet["id"]}
     assert any(f["ref"] == f"run:{r2['id']}" for f in by_type["second_pass"])
     # Flags point at a location on the drawing
-    open_end = by_type["open_end"][0]
-    assert open_end["sheet_id"] == a["id"] and open_end["x"] is not None
+    open_end = next(f for f in by_type["open_end"] if f["sheet_id"] == a["id"])  # sheet b has open ends too; order isn't fixed
+    assert open_end["x"] is not None
 
     # Sign-off is blocked while flags are open
     assert client.post(f"/api/jobs/{jid}/finalise").status_code == 409

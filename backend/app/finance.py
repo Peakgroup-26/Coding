@@ -121,7 +121,9 @@ def job_financials(db: Session, job: Job) -> dict:
             u = db.get(User, e.user_id)
             charge["labour"] += entry_hours(e) * ((u.charge_rate if u and u.charge_rate else None) or float(cfg.get("default_charge_rate", 110)))
         markup = 1 + float(cfg.get("charge_materials_markup_pct", 25)) / 100
-        earned = charge["labour"] + (cost_to_date - a["actual"].get("labour", 0.0)) * markup
+        itemised = list(db.scalars(select(JobCost).where(JobCost.job_id == job.id, JobCost.sell_unit.is_not(None))))
+        sold = sum(c.qty * c.sell_unit for c in itemised)
+        earned = charge["labour"] + sold + max(0.0, cost_to_date - a["actual"].get("labour", 0.0) - sum(c.amount for c in itemised)) * markup
         contract = max(job.contract_value or 0.0, earned)  # a quoted not-to-exceed stays the floor for the forecast
         pct = 100.0 if job.work_status in ("complete", "invoiced", "closed") else (min(100.0, 100 * earned / contract) if contract else 0.0)
     else:
@@ -132,8 +134,8 @@ def job_financials(db: Session, job: Job) -> dict:
             pct = job.percent_complete
             if pct > 0:
                 forecast_cost = max(forecast_cost, cost_to_date / (pct / 100), cost_to_date + committed)
-        else:
-            pct = min(100.0, 100 * cost_to_date / forecast_cost) if forecast_cost else 0.0
+        else:  # cost to cost; with no budget yet there's nothing to measure against
+            pct = min(100.0, 100 * cost_to_date / forecast_cost) if forecast_cost and budget_total else 0.0
         earned = contract * pct / 100
     margin = contract - forecast_cost
     return {

@@ -162,7 +162,8 @@ class CostIn(BaseModel):
     paid_date: date | None = None
 
 
-COST_FIELDS = ["day", "category", "description", "qty", "unit_cost", "amount", "supplier", "ref", "source", "due_date", "paid_date", "user_id"]
+COST_FIELDS = ["day", "category", "description", "qty", "unit_cost", "amount", "supplier", "ref", "source", "due_date", "paid_date", "user_id",
+               "sell_unit", "markup_pct"]
 
 
 def _cost(c: JobCost) -> dict:
@@ -207,6 +208,35 @@ def delete_cost(cost_id: int, db: Session = Depends(get_db), user: User = Depend
     record(db, user.id, "job_cost", c.id, "delete", before=_cost(c))
     db.delete(c)
     db.commit()
+
+
+@router.get("/stock/search")
+def stock_search(q: str = "", db: Session = Depends(get_db), _: User = Depends(current_user)):
+    from .. import stock
+
+    return stock.search(db, q) if len(q.strip()) >= 2 else []
+
+
+class StockUse(BaseModel):
+    code: str = ""
+    description: str = ""
+    qty: float = Field(default=1, gt=0)
+    unit: str = "ea"
+    supplier_id: int | None = None
+    unit_cost: float | None = Field(default=None, ge=0)  # override the price-file cost
+    markup_pct: float | None = Field(default=None, ge=0, le=500)  # override the margin
+
+
+@router.post("/jobs/{job_id}/materials")
+def office_material(job_id: int, body: StockUse, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    from .field import MaterialIn, add_material
+
+    j = get_or_404(db, Job, job_id)
+    c = add_material(db, j, MaterialIn(code=body.code, description=body.description, qty=body.qty, unit=body.unit, supplier_id=body.supplier_id),
+                     user, unit_cost=body.unit_cost, markup_pct=body.markup_pct)
+    record(db, user.id, "job_cost", c.id, "create", after=_cost(c))
+    db.commit()
+    return _cost(c)
 
 
 # --- variations ---
@@ -340,9 +370,12 @@ def suggest(job_id: int, db: Session = Depends(get_db), _: User = Depends(curren
         if hrs:
             lines.append({"description": "Labour", "qty": round(hrs, 2), "unit_price": float(cfg.get("default_charge_rate", 110))})
         markup = 1 + float(cfg.get("charge_materials_markup_pct", 25)) / 100
-        mats = f["cost_to_date"] - next(r["actual"] for r in f["categories"] if r["category"] == "labour")
-        if mats:
-            lines.append({"description": "Materials and parts", "qty": 1, "unit_price": round(mats * markup, 2)})
+        itemised = list(db.scalars(select(JobCost).where(JobCost.job_id == job.id, JobCost.sell_unit.is_not(None))))
+        for c in itemised:  # stock items at their price-file sell price
+            lines.append({"description": c.description, "qty": c.qty, "unit_price": c.sell_unit})
+        mats = f["cost_to_date"] - next(r["actual"] for r in f["categories"] if r["category"] == "labour") - sum(c.amount for c in itemised)
+        if mats > 0.005:
+            lines.append({"description": "Other materials and parts", "qty": 1, "unit_price": round(mats * markup, 2)})
         already = f["invoiced"]
         return {"kind": "final", "lines": lines, "amount": round(sum(l["qty"] * l["unit_price"] for l in lines) - already, 2),
                 "note": f"Already invoiced ${already:,.2f}" if already else ""}

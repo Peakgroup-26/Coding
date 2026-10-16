@@ -135,7 +135,7 @@ function TodayTab({ onQueued }: { onQueued: () => void }) {
             <div className="small">{cur.on_break ? "On a break" : "Clocked in"} since {cur.start_local}</div>
             <div className="big">{timer}</div>
             <div><b>{cur.job_no} {cur.job || "No job"}</b>{cur.task && <> · {cur.task}</>}</div>
-            {cur.job_id && <Link to={`/field/jobs/${cur.job_id}`} className="small">📷 Photos and job details ›</Link>}
+            {cur.job_id && <Link to={`/field/jobs/${cur.job_id}`} className="small">📷 Photos, plans and materials ›</Link>}
             {t.end_needs.map((n) => <p key={n} className="warn small">{n} <Link to="/field/prestart">Pre-start ›</Link></p>)}
             <div className="clock-actions">
               <button onClick={() => setPicking("switch")} disabled={busy}>Switch job</button>
@@ -233,14 +233,17 @@ function ClockInSheet({ title, onPick, onCancel, busy }: { title: string; onPick
 
 function JobsTab() {
   const [q, setQ] = useState("");
-  const { data } = useLoad<JobBrief[]>(`/api/field/jobs?q=${encodeURIComponent(q)}`, [q]);
+  const [finished, setFinished] = useState(false);
+  const { data } = useLoad<JobBrief[]>(`/api/field/jobs?q=${encodeURIComponent(q)}&finished=${finished}`, [q, finished]);
   return (
     <div className="stack">
       <h1>Jobs</h1>
       <input placeholder="Search by name, number, customer or street" value={q} onChange={(e) => setQ(e.target.value)} />
+      <label className="check-line small"><input type="checkbox" checked={finished} onChange={(e) => setFinished(e.target.checked)} /> Show finished jobs too (to add photos you forgot)</label>
       {data?.map((j) => (
         <Link key={j.id} to={`/field/jobs/${j.id}`} className={`job-tile ${j.today ? "today" : ""}`}>
           <b>{j.job_no} {j.name}</b>{j.priority === "urgent" && <span className="badge bad">Urgent</span>}
+          {["invoiced", "closed", "complete"].includes(j.work_status) && <span className="badge ok">finished</span>}
           <span className="small muted">{[j.customer, j.address].filter(Boolean).join(" · ")}</span>
         </Link>
       ))}
@@ -251,58 +254,139 @@ function JobsTab() {
 interface FieldJobDetail extends JobBrief { description: string; order_no: string; contact: string; customer_phone: string; access_notes: string; site_contact: string;
   documents: DocOut[]; notes: { id: number; ref: string; title: string; body: string; created_by: string; created_at: string; kind: string }[];
   materials: { id: number; description: string; by: string; day: string }[]; pos: { po_no: string; supplier: string; status: string; mine: boolean }[];
-  forms: { id: number; name: string; kind: string }[]; completed: boolean; signed_by_name: string }
+  forms: { id: number; name: string; kind: string }[]; completed: boolean; signed_by_name: string;
+  plans: { id: number; filename: string; pages: number }[]; specs: { id: number; filename: string; title: string; doc_type: string }[] }
+
+type JobTab = "photos" | "plans" | "materials" | "notes";
 
 function FieldJob() {
   const { jobId } = useParams();
   const { data: j, reload } = useLoad<FieldJobDetail>(`/api/field/jobs/${jobId}`);
-  const [panel, setPanel] = useState<"" | "note" | "material" | "po" | "form" | "complete">("");
+  const [tab, setTab] = useState<JobTab>(() => (new URLSearchParams(window.location.search).get("tab") as JobTab) || "photos");
+  const [panel, setPanel] = useState<"" | "note" | "po" | "form" | "complete">("");
   const [formId, setFormId] = useState<number | null>(null);
   if (!j) return <p className="muted">Loading…</p>;
-  const openDoc = async (d: DocOut) => window.open(await fetchBlobUrl(`/api/field/documents/${d.id}`), "_blank");
+  const open = async (url: string) => window.open(await fetchBlobUrl(url), "_blank");
   const done = () => { setPanel(""); reload(); };
   const phone = j.customer_phone || (j.contact.match(/[\d ]{8,}/)?.[0] ?? "");
+  const photos = j.documents.filter((d) => d.is_image && d.folder === "Photos");
+  const otherDocs = j.documents.filter((d) => !(d.is_image && d.folder === "Photos"));
+  const nPlans = j.plans.length + j.specs.length + otherDocs.length;
   return (
     <div className="stack">
       <Link to="/field/jobs" className="small">‹ Jobs</Link>
       <h1>{j.job_no} {j.name}</h1>
-      <div className="small muted">{j.customer}{j.order_no && <> · Order {j.order_no}</>}</div>
+      <div className="small muted">{j.customer}{j.order_no && <> · Order {j.order_no}</>}{j.completed && <> · <span className="ok">finished</span></>}</div>
       <div className="action-row">
         {j.address && <a className="btn" href={`https://maps.google.com/?q=${encodeURIComponent(j.address)}`} target="_blank" rel="noreferrer">📍 Directions</a>}
         {phone && <a className="btn" href={`tel:${phone.replace(/\s/g, "")}`}>📞 Call</a>}
       </div>
-      {j.address && <p>{j.address}</p>}
-      <JobPhotos jobId={j.id} photos={j.documents.filter((d) => d.is_image && d.folder === "Photos")} onAdded={reload} />
+      {j.address && <p style={{ margin: 0 }}>{j.address}</p>}
       {j.description && <section className="card"><h3>The job</h3><p className="pre">{j.description}</p></section>}
       {(j.access_notes || j.site_contact || j.contact) && (
         <section className="card"><h3>Site</h3>{j.access_notes && <p className="pre">{j.access_notes}</p>}
           {(j.site_contact || j.contact) && <p className="small">Contact: {j.site_contact || j.contact}</p>}</section>
       )}
-      <div className="grid-buttons">
-        <button onClick={() => setPanel("note")}>📝 Note</button>
-        <button onClick={() => setPanel("material")}>🔩 Materials used</button>
-        <button onClick={() => setPanel("po")}>🧾 Get a PO number</button>
-        <button onClick={() => setPanel("form")}>✅ Forms & SWMS</button>
-        {!j.completed && <button className="primary" onClick={() => setPanel("complete")}>🏁 Job finished</button>}
+      <div className="job-tabs">
+        {([["photos", `📷 Photos${photos.length ? ` (${photos.length})` : ""}`], ["plans", `📐 Plans & specs${nPlans ? ` (${nPlans})` : ""}`],
+          ["materials", `🔩 Materials${j.materials.length ? ` (${j.materials.length})` : ""}`], ["notes", "📝 Notes & forms"]] as [JobTab, string][]).map(([k, l]) => (
+          <button key={k} className={tab === k ? "on" : ""} onClick={() => setTab(k)}>{l}</button>))}
       </div>
-      {panel === "note" && <NoteForm jobId={j.id} onDone={done} />}
-      {panel === "material" && <MaterialForm jobId={j.id} onDone={done} />}
-      {panel === "po" && <PoForm jobId={j.id} onDone={done} />}
-      {panel === "form" && (formId ? <FillForm jobId={j.id} templateId={formId} onDone={() => { setFormId(null); done(); }} /> : (
-        <div className="card">{j.forms.map((f) => <button key={f.id} className="job-tile" onClick={() => setFormId(f.id)}>{f.name}</button>)}</div>
-      ))}
-      {panel === "complete" && <CompleteForm jobId={j.id} onDone={done} />}
-      {j.completed && <p className="ok">✓ Completed{j.signed_by_name && <> · signed by {j.signed_by_name}</>}</p>}
-      {j.documents.some((d) => !(d.is_image && d.folder === "Photos")) && (
-        <section><h2>Plans and documents</h2>
-          {j.documents.filter((d) => !(d.is_image && d.folder === "Photos")).map((d) => <button key={d.id} className="job-tile" onClick={() => openDoc(d)}>{d.is_image ? "🖼" : "📄"} {d.title || d.filename} <span className="small muted">{d.folder}</span></button>)}
+      {tab === "photos" && <JobPhotos jobId={j.id} photos={photos} onAdded={reload} />}
+      {tab === "plans" && (
+        <section className="stack">
+          {nPlans === 0 && <p className="muted">No plans or documents on this job yet.</p>}
+          {j.plans.length > 0 && <h2>Plans</h2>}
+          {j.plans.map((f) => <button key={`p${f.id}`} className="job-tile" onClick={() => open(`/api/field/jobs/${j.id}/plans/${f.id}`)}>📐 {f.filename}
+            <span className="small muted">{f.pages} page{f.pages === 1 ? "" : "s"}</span></button>)}
+          {j.specs.length > 0 && <h2>Scope, specs and reports</h2>}
+          {j.specs.map((t) => <button key={`s${t.id}`} className="job-tile" onClick={() => open(`/api/field/jobs/${j.id}/specs/${t.id}`)}>📄 {t.title}
+            {t.doc_type && <span className="small muted">{t.doc_type.replace(/_/g, " ")}</span>}</button>)}
+          {otherDocs.length > 0 && <h2>Other documents</h2>}
+          {otherDocs.map((d) => <button key={d.id} className="job-tile" onClick={() => open(`/api/field/documents/${d.id}`)}>{d.is_image ? "🖼" : "📄"} {d.title || d.filename}
+            <span className="small muted">{d.folder}</span></button>)}
         </section>
       )}
-      {j.pos.length > 0 && <section><h2>Purchase orders</h2>{j.pos.map((p) => <div key={p.po_no} className="note-row"><b>{p.po_no}</b> {p.supplier} <span className="muted small">{p.status}</span></div>)}</section>}
-      {j.notes.length > 0 && <section><h2>Notes</h2>{j.notes.map((n) => <div key={n.id} className="note-row col"><b>{n.title}</b>{n.body !== n.title && <span className="pre small">{n.body}</span>}
-        <small className="muted">{n.created_by} · {new Date(n.created_at).toLocaleString("en-AU")}</small></div>)}</section>}
-      {j.materials.length > 0 && <section><h2>Materials used</h2>{j.materials.map((m) => <div key={m.id} className="note-row">{m.description}<small className="muted">{m.by}</small></div>)}</section>}
+      {tab === "materials" && <StockMaterials jobId={j.id} used={j.materials} onAdded={reload} />}
+      {tab === "notes" && (
+        <section className="stack">
+          <div className="grid-buttons">
+            <button onClick={() => setPanel("note")}>📝 Add a note</button>
+            <button onClick={() => setPanel("po")}>🧾 Get a PO number</button>
+            <button onClick={() => setPanel("form")}>✅ Forms & SWMS</button>
+            {!j.completed && <button className="primary" onClick={() => setPanel("complete")}>🏁 Job finished</button>}
+          </div>
+          {panel === "note" && <NoteForm jobId={j.id} onDone={done} />}
+          {panel === "po" && <PoForm jobId={j.id} onDone={done} />}
+          {panel === "form" && (formId ? <FillForm jobId={j.id} templateId={formId} onDone={() => { setFormId(null); done(); }} /> : (
+            <div className="card">{j.forms.map((f) => <button key={f.id} className="job-tile" onClick={() => setFormId(f.id)}>{f.name}</button>)}</div>
+          ))}
+          {panel === "complete" && <CompleteForm jobId={j.id} onDone={done} />}
+          {j.completed && <p className="ok">✓ Completed{j.signed_by_name && <> · signed by {j.signed_by_name}</>}</p>}
+          {j.pos.length > 0 && <section><h2>Purchase orders</h2>{j.pos.map((p) => <div key={p.po_no} className="note-row"><b>{p.po_no}</b> {p.supplier} <span className="muted small">{p.status}</span></div>)}</section>}
+          {j.notes.length > 0 && <section><h2>Notes</h2>{j.notes.map((n) => <div key={n.id} className="note-row col"><b>{n.title}</b>{n.body !== n.title && <span className="pre small">{n.body}</span>}
+            <small className="muted">{n.created_by} · {new Date(n.created_at).toLocaleString("en-AU")}</small></div>)}</section>}
+        </section>
+      )}
     </div>
+  );
+}
+
+interface Product { code: string; description: string; brand: string; group: string; unit: string; supplier_id?: number | null; cost?: number; sell?: number }
+
+/** Materials used from stock: search the price files, tap, set how many. The office sees the cost and sell price. */
+function StockMaterials({ jobId, used, onAdded }: { jobId: number; used: { id: number; description: string; by: string; day: string }[]; onAdded: () => void }) {
+  const [q, setQ] = useState("");
+  const { data: found } = useLoad<Product[]>(q.trim().length >= 2 ? `/api/field/products?q=${encodeURIComponent(q)}` : null, [q]);
+  const [pick, setPick] = useState<Product | null>(null);
+  const [qty, setQty] = useState(1);
+  const [typed, setTyped] = useState(false);
+  const [text, setText] = useState("");
+  const [run, error, busy] = useAction();
+  const add = (body: Record<string, unknown>) => run(async () => {
+    await api.post(`/api/field/jobs/${jobId}/materials`, body);
+    setPick(null); setQ(""); setQty(1); setText(""); setTyped(false); onAdded();
+  });
+  return (
+    <section className="stack">
+      {!pick && !typed && (
+        <>
+          <input placeholder="Search stock: e.g. 100 bend, ball valve, PEX 20" value={q} onChange={(e) => setQ(e.target.value)} />
+          {found?.map((p) => (
+            <button key={p.code + (p.supplier_id ?? "")} className="job-tile" onClick={() => { setPick(p); setQty(1); }}>
+              <b>{p.description}</b><span className="small muted">{[p.brand, p.group, p.unit].filter(Boolean).join(" · ")}</span>
+            </button>
+          ))}
+          {q.trim().length >= 2 && found && found.length === 0 && <p className="muted small">Nothing in the price files matches.</p>}
+          <button className="link small" onClick={() => setTyped(true)}>Not in the list? Type it in</button>
+        </>
+      )}
+      {pick && (
+        <div className="card">
+          <b>{pick.description}</b>
+          <div className="qty-row">
+            <button onClick={() => setQty(Math.max(0.5, qty - 1))}>−</button>
+            <input type="number" inputMode="decimal" min={0.01} step="any" value={qty} onChange={(e) => setQty(Number(e.target.value))} />
+            <button onClick={() => setQty(qty + 1)}>+</button>
+            <span>{pick.unit || "ea"}</span>
+          </div>
+          <div className="row"><button className="primary" disabled={busy || qty <= 0} onClick={() => add({ code: pick.code, supplier_id: pick.supplier_id ?? null, qty })}>Add to job</button>
+            <button className="link" onClick={() => setPick(null)}>Back</button></div>
+        </div>
+      )}
+      {typed && (
+        <div className="card">
+          <input placeholder="What did you use?" value={text} onChange={(e) => setText(e.target.value)} />
+          <div className="qty-row"><button onClick={() => setQty(Math.max(0.5, qty - 1))}>−</button>
+            <input type="number" inputMode="decimal" value={qty} onChange={(e) => setQty(Number(e.target.value))} /><button onClick={() => setQty(qty + 1)}>+</button></div>
+          <div className="row"><button className="primary" disabled={busy || !text.trim()} onClick={() => add({ description: text, qty })}>Add to job</button>
+            <button className="link" onClick={() => setTyped(false)}>Back</button></div>
+          <p className="small muted">The office will price it.</p>
+        </div>
+      )}
+      <ErrorLine error={error} />
+      {used.length > 0 && <section><h2>Used on this job</h2>{used.map((m) => <div key={m.id} className="note-row">{m.description}<small className="muted">{m.by} · {fmtDay(m.day)}</small></div>)}</section>}
+    </section>
   );
 }
 
@@ -320,20 +404,6 @@ function NoteForm({ jobId, onDone }: { jobId: number; onDone: () => void }) {
         <PhotoButton label="Add photo" jobId={jobId} onDone={(d) => setPhotos([...photos, d.id])} />
       </div>
       <button className="primary" disabled={busy || !text}>Save</button><ErrorLine error={error} />
-    </form>
-  );
-}
-
-function MaterialForm({ jobId, onDone }: { jobId: number; onDone: () => void }) {
-  const [f, setF] = useState({ description: "", qty: 1, unit: "ea", code: "" });
-  const [run, error, busy] = useAction();
-  return (
-    <form className="card" onSubmit={(e) => { e.preventDefault(); run(async () => { await api.post(`/api/field/jobs/${jobId}/materials`, f); onDone(); }); }}>
-      <input placeholder="What did you use? e.g. 100 DN PVC bend" value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} required />
-      <div className="row"><input type="number" min={0.01} step="any" style={{ width: 90 }} value={f.qty} onChange={(e) => setF({ ...f, qty: Number(e.target.value) })} />
-        <select value={f.unit} onChange={(e) => setF({ ...f, unit: e.target.value })}>{["ea", "m", "length", "box", "L", "kg"].map((u) => <option key={u}>{u}</option>)}</select>
-        <input placeholder="Code (optional)" value={f.code} onChange={(e) => setF({ ...f, code: e.target.value })} /></div>
-      <button className="primary" disabled={busy}>Add</button><ErrorLine error={error} />
     </form>
   );
 }

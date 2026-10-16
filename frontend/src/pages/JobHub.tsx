@@ -13,7 +13,7 @@ export interface Fin {
   percent_complete: number; percent_basis: string; earned: number; invoiced: number; received: number; retention_held: number; over_under_billed: number;
   to_invoice: number; hours_budget: number; hours_actual: number; categories: CatRow[]; over_budget: boolean;
 }
-type Tab = "overview" | "budget" | "time" | "costs" | "variations" | "invoices" | "docs" | "project" | "diary" | "forms";
+type Tab = "overview" | "budget" | "time" | "materials" | "costs" | "variations" | "invoices" | "docs" | "project" | "diary" | "forms";
 
 export default function JobHub() {
   const { jobId } = useParams();
@@ -23,7 +23,7 @@ export default function JobHub() {
   const [tab, setTab] = useState<Tab>(() => (new URLSearchParams(window.location.search).get("tab") as Tab) || "overview");
   if (!w) return <main className="page">Loading…</main>;
   const f = w.financials;
-  const tabs: [Tab, string][] = [["overview", "Overview"], ["budget", "Budget"], ["time", "Time"], ["costs", "POs & costs"], ["variations", "Variations"],
+  const tabs: [Tab, string][] = [["overview", "Overview"], ["budget", "Budget"], ["time", "Time"], ["materials", "Materials"], ["costs", "POs & costs"], ["variations", "Variations"],
     ["invoices", "Invoices"], ["docs", "Documents"], ["project", "RFIs & defects"], ["diary", "Site diary"], ["forms", "Forms"]];
   return (
     <main className="page">
@@ -51,6 +51,7 @@ export default function JobHub() {
       {tab === "overview" && <Overview w={w} f={f} fin={fin} onSaved={reload} />}
       {tab === "budget" && <Budget jobId={w.id} f={f} onChange={reload} />}
       {tab === "time" && <TimeTab jobId={w.id} />}
+      {tab === "materials" && <Materials jobId={w.id} onChange={reload} />}
       {tab === "costs" && <Costs jobId={w.id} onChange={reload} />}
       {tab === "variations" && <Variations jobId={w.id} onChange={reload} />}
       {tab === "invoices" && <Invoices jobId={w.id} onChange={reload} />}
@@ -182,6 +183,65 @@ function TimeTab({ jobId }: { jobId: number }) {
       <section className="card">
         <h3>By person</h3>{data.by_person.map((p) => <div key={p.name} className="kv-row"><span>{p.name}</span><b>{hrs(p.hours)}</b></div>)}
         <h3>By task</h3>{data.by_task.map((p) => <div key={p.task} className="kv-row"><span>{p.task}</span><b>{hrs(p.hours)}</b></div>)}
+      </section>
+    </div>
+  );
+}
+
+interface MatRow { id: number; day: string; description: string; qty: number; unit_cost: number; amount: number; sell_unit: number | null; markup_pct: number | null;
+  source: string; ref: string; category: string }
+interface StockRow { code: string; supplier_id: number | null; supplier: string; description: string; brand: string; group: string; unit: string; cost: number; sell: number; markup_pct: number; source: string }
+
+/** Materials used from stock: costed at the price-file rate, sold at cost plus the margin (by product group, or the default). */
+function Materials({ jobId, onChange }: { jobId: number; onChange: () => void }) {
+  const costs = useLoad<MatRow[]>(`/api/jobs/${jobId}/costs`);
+  const [q, setQ] = useState("");
+  const found = useLoad<StockRow[]>(q.trim().length >= 2 ? `/api/stock/search?q=${encodeURIComponent(q)}` : null, [q]);
+  const [pick, setPick] = useState<StockRow | null>(null);
+  const [qty, setQty] = useState(1);
+  const [markup, setMarkup] = useState<number | "">("");
+  const [run, error, busy] = useAction();
+  const rows = (costs.data ?? []).filter((c) => c.category === "materials" && (c.source === "stock" || c.source === "field" || c.sell_unit !== null));
+  const cost = rows.reduce((s, r) => s + r.amount, 0);
+  const sell = rows.reduce((s, r) => s + (r.sell_unit ?? 0) * r.qty, 0);
+  const unpriced = rows.filter((r) => r.sell_unit === null);
+  return (
+    <div className="two-col even">
+      <section className="card">
+        <h2>Materials used from stock</h2>
+        <DataTable rows={rows} cols={[
+          { key: "d", label: "Day", hideSm: true, render: (r) => fmtDate(r.day) },
+          { key: "x", label: "What", render: (r) => <>{r.description}{r.source === "field" && <span className="badge warn" title="Typed in on the phone: price it">to price</span>}</> },
+          { key: "c", label: "Cost", num: true, render: (r) => money(r.amount, true) },
+          { key: "m", label: "Margin", num: true, render: (r) => (r.markup_pct !== null ? `${num(r.markup_pct)}%` : "") },
+          { key: "s", label: "Sell", num: true, render: (r) => (r.sell_unit !== null ? money(r.sell_unit * r.qty, true) : "") },
+          { key: "r", label: "", render: (r) => <button className="link small" onClick={() => run(async () => { await api.del(`/api/costs/${r.id}`); costs.reload(); onChange(); })}>remove</button> },
+        ]} empty="Nothing used from stock yet. The team add it from the phone (Materials tab on the job)." />
+        <p className="small">Cost {money(cost, true)} · sell {money(sell, true)} · margin {money(sell - cost, true)}{unpriced.length > 0 && <span className="warn"> · {unpriced.length} typed in, to price under POs & costs</span>}</p>
+        <p className="small muted">On do-and-charge jobs these go on the invoice line by line at their sell price.</p>
+      </section>
+      <section className="card">
+        <h2>Add from stock</h2>
+        <input placeholder="Search the price files and price book" value={q} onChange={(e) => { setQ(e.target.value); setPick(null); }} style={{ width: "100%" }} />
+        {!pick && <div className="pick-list">{found.data?.map((p) => (
+          <button key={p.code + (p.supplier_id ?? "")} className="job-tile" onClick={() => { setPick(p); setMarkup(p.markup_pct); setQty(1); }}>
+            <b>{p.description}</b><span className="small muted">{[p.brand, p.group, p.supplier, `${money(p.cost, true)} cost → ${money(p.sell, true)} sell`].filter(Boolean).join(" · ")}</span>
+          </button>))}</div>}
+        {pick && (
+          <div className="card">
+            <b>{pick.description}</b> <span className="small muted">{pick.supplier} · {pick.code}</span>
+            <div className="row wrap">
+              <label className="inline">Qty <input type="number" min={0.01} step="any" style={{ width: 80 }} value={qty} onChange={(e) => setQty(Number(e.target.value))} /></label>
+              <label className="inline">Margin % <input type="number" min={0} style={{ width: 80 }} value={markup} onChange={(e) => setMarkup(e.target.value === "" ? "" : Number(e.target.value))} /></label>
+              <span className="small">{money(pick.cost * qty, true)} cost → <b>{money(pick.cost * (1 + Number(markup || 0) / 100) * qty, true)}</b> sell</span>
+            </div>
+            <div className="row"><button className="primary" disabled={busy} onClick={() => run(async () => {
+              await api.post(`/api/jobs/${jobId}/materials`, { code: pick.code, supplier_id: pick.supplier_id, qty, markup_pct: markup === "" ? null : markup });
+              setPick(null); setQ(""); costs.reload(); onChange(); })}>Add</button><button className="link" onClick={() => setPick(null)}>Back</button></div>
+          </div>
+        )}
+        <p className="small muted">Prices come from the latest supplier price files (cheapest supplier), else the price book. Margins by product group are set in Admin → Operations & plant.</p>
+        <ErrorLine error={error} />
       </section>
     </div>
   );

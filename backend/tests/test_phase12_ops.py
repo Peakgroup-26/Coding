@@ -218,7 +218,7 @@ def test_purchasing_variations_invoices_and_finance(client):
     assert f["hours_budget"] == 110 and f["hours_actual"] == 8.0
     cats = {r["category"]: r for r in f["categories"]}
     assert cats["labour"]["actual"] == 480.0  # 8 h x $60
-    assert cats["materials"]["actual"] == 317.0  # bill 310 + tape 7
+    assert cats["materials"]["actual"] == 310.0  # the bill; the tape was typed in, so the office prices it
     assert cats["subcontract"]["actual"] == 1200 and cats["subcontract"]["budget"] == 0 and cats["subcontract"]["forecast"] == 1200
     assert f["over_budget"] is True  # subcontract had no budget
     # Progress claim from % complete; sending it queues the builder's follow-up only for final invoices
@@ -504,3 +504,49 @@ def test_photos_on_a_job_without_being_clocked_in(client):
     # and the office sees them in the job's documents
     office = client.get(f"/api/jobs/{job['id']}/docs").json()["documents"]
     assert sum(1 for d in office if d["folder"] == "Photos") == 3
+
+
+
+def test_materials_from_stock_priced_from_price_files_plus_margin(client):
+    sup = client.post("/api/suppliers", json={"name": "Stock Supplier"}).json()
+    csv = "Product Code,Description,Manufacturer Code,Nett Price,Product Group\nSS-1,Brass ball valve 20mm,BV20,18.00,Valves\nSS-2,Rheem 250L hot water unit,RH250,1500.00,Hot water\n"
+    client.post("/api/supplier-prices/import", files={"file": ("stock.csv", csv.encode())}, data={"supplier_id": sup["id"]})
+    client.put("/api/ops-settings", json={"stock_markup_pct": 30, "markup_by_group": {"Hot water": 15}})
+    job = _job(client, "Stock job", customer_name="Stock Co", billing="charge")
+    _uid, h = _user(client, "stocky@test.local", role="field")
+    found = client.get("/api/field/products?q=ball valve", headers=h).json()
+    assert found and found[0]["code"] == "SS-1" and "cost" not in found[0] and "sell" not in found[0]  # no prices on the phone
+    client.post(f"/api/field/jobs/{job['id']}/materials", json={"code": "SS-1", "qty": 2}, headers=h)
+    client.post(f"/api/field/jobs/{job['id']}/materials", json={"code": "SS-2", "qty": 1}, headers=h)
+    costs = {c["ref"]: c for c in client.get(f"/api/jobs/{job['id']}/costs").json()}
+    assert costs["SS-1"]["unit_cost"] == 18.0 and costs["SS-1"]["sell_unit"] == 23.4 and costs["SS-1"]["source"] == "stock"
+    assert costs["SS-2"]["markup_pct"] == 15 and costs["SS-2"]["sell_unit"] == 1725.0
+    office = client.post(f"/api/jobs/{job['id']}/materials", json={"code": "SS-1", "qty": 1, "markup_pct": 50}).json()
+    assert office["sell_unit"] == 27.0
+    sug = client.get(f"/api/invoices/suggest/{job['id']}").json()
+    lines = {l["description"]: l for l in sug["lines"]}
+    assert lines["2 ea Brass ball valve 20mm"]["unit_price"] == 23.4 and lines["1 ea Rheem 250L hot water unit"]["unit_price"] == 1725.0
+    assert sug["amount"] == round(2 * 23.4 + 1725 + 27, 2)
+    assert client.get("/api/field/products?q=ball", headers=h).status_code == 200
+    # plans and specs are on the phone too
+    detail = client.get(f"/api/field/jobs/{job['id']}", headers=h).json()
+    assert detail["plans"] == [] and detail["specs"] == []
+
+
+def test_plans_and_specs_from_the_tender_on_the_phone(client):
+    from .test_phase7_autopilot import _plan_pdf
+
+    pdf = _plan_pdf()
+    q = client.post("/api/quick-start", data={"kind": "hydraulic", "name": "Plans on phones", "client": "Plan Co"},
+                    files=[("files", ("plans.pdf", pdf, "application/pdf")), ("files", ("scope.txt", b"Scope: all sanitary drainage.", "text/plain"))]).json()
+    client.post(f"/api/jobs/{q['id']}/start-work")
+    _uid, h = _user(client, "planviewer@test.local", role="field")
+    d = client.get(f"/api/field/jobs/{q['id']}", headers=h).json()
+    assert d["plans"][0]["filename"] == "plans.pdf" and d["specs"][0]["filename"] == "scope.txt"
+    assert client.get(f"/api/field/jobs/{q['id']}/plans/{d['plans'][0]['id']}", headers=h).content[:5] == b"%PDF-"
+    assert b"sanitary" in client.get(f"/api/field/jobs/{q['id']}/specs/{d['specs'][0]['id']}", headers=h).content
+    # a finished job still comes up when searched, so photos can be added later
+    client.put(f"/api/jobs/{q['id']}/work", json={"work_status": "closed"})
+    assert all(j["id"] != q["id"] for j in client.get("/api/field/jobs", headers=h).json())
+    assert any(j["id"] == q["id"] for j in client.get("/api/field/jobs?finished=true", headers=h).json())
+    assert any(j["id"] == q["id"] for j in client.get("/api/field/jobs?q=plans on", headers=h).json())

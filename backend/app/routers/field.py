@@ -17,8 +17,8 @@ from ..audit import record
 from ..auth import current_user
 from ..db import get_db
 from ..finance import entry_hours
-from ..models import (Customer, Document, FormResponse, FormTemplate, Job, JobCost, Notification, Plant, PlantCheck, PlantDefect,
-                      ProjectItem, PurchaseOrder, ScheduleEntry, Site, Supplier, TimeEntry, TimeOff, User)
+from ..models import (Customer, Document, DrawingFile, FormResponse, FormTemplate, Job, JobCost, Notification, Plant, PlantCheck, PlantDefect,
+                      ProjectItem, PurchaseOrder, ScheduleEntry, Site, Supplier, TenderDocument, TimeEntry, TimeOff, User)
 from . import get_or_404
 
 router = APIRouter(prefix="/api/field", tags=["field"])
@@ -60,13 +60,15 @@ def today(db: Session = Depends(get_db), user: User = Depends(current_user)):
 
 
 @router.get("/jobs")
-def jobs(q: str = "", db: Session = Depends(get_db), user: User = Depends(current_user)):
-    """Jobs to clock into: today's schedule first, then the ones recently worked on, then everything live."""
+def jobs(q: str = "", finished: bool = False, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    """Jobs to clock into: today's schedule first, then the ones recently worked on, then everything live.
+    Finished jobs (invoiced, closed) come too when asked for or searched for, so photos can be added later."""
     d = ts.local_day(ts.now())
     mine = [s.job_id for s in db.scalars(select(ScheduleEntry).where(ScheduleEntry.user_id == user.id, ScheduleEntry.day == d)) if s.job_id]
     recent = [e.job_id for e in db.scalars(select(TimeEntry).where(TimeEntry.user_id == user.id, TimeEntry.job_id.is_not(None))
                                            .order_by(TimeEntry.start_at.desc()).limit(30))]
-    stmt = select(Job).where(Job.work_status.in_(("scheduled", "in_progress", "on_hold", "complete")))
+    statuses = ("scheduled", "in_progress", "on_hold", "complete") + (("invoiced", "closed") if finished or q else ())
+    stmt = select(Job).where(Job.work_status.in_(statuses))
     if q:
         stmt = stmt.where(or_(Job.name.ilike(f"%{q}%"), Job.job_no.ilike(f"%{q}%"), Job.client.ilike(f"%{q}%"), Job.address.ilike(f"%{q}%")))
     live = {j.id: j for j in db.scalars(stmt.order_by(Job.id.desc()).limit(200)) if can_see_job(user, j)}
@@ -84,7 +86,7 @@ def job_detail(job_id: int, db: Session = Depends(get_db), user: User = Depends(
     notes = db.scalars(select(ProjectItem).where(ProjectItem.job_id == j.id, ProjectItem.kind.in_(("note", "defect", "site_instruction")))
                        .order_by(ProjectItem.created_at.desc()).limit(50))
     users = {u.id: u.name or u.email for u in db.scalars(select(User))}
-    mats = db.scalars(select(JobCost).where(JobCost.job_id == j.id, JobCost.source == "field").order_by(JobCost.created_at.desc()))
+    mats = db.scalars(select(JobCost).where(JobCost.job_id == j.id, JobCost.source.in_(("field", "stock"))).order_by(JobCost.created_at.desc()))
     pos = db.scalars(select(PurchaseOrder).where(PurchaseOrder.job_id == j.id).order_by(PurchaseOrder.id.desc()))
     return {**_brief(db, j), "description": j.description, "order_no": j.order_no, "contact": j.contact,
             "customer_phone": cust.phone if cust else "", "access_notes": site.access_notes if site else "",
@@ -94,6 +96,10 @@ def job_detail(job_id: int, db: Session = Depends(get_db), user: User = Depends(
             "materials": [{"id": m.id, "description": m.description, "qty": m.qty, "by": users.get(m.user_id, ""),
                            "day": m.day.isoformat()} for m in mats],
             "pos": [{"po_no": p.po_no, "supplier": p.supplier_name, "status": p.status, "mine": p.created_by == user.id} for p in pos],
+            "plans": [{"id": f.id, "filename": f.filename, "pages": f.page_count} for f in db.scalars(select(DrawingFile).where(DrawingFile.job_id == j.id)
+                                                                                                     .order_by(DrawingFile.uploaded_at))],
+            "specs": [{"id": t.id, "filename": t.filename, "title": t.title or t.filename, "doc_type": t.doc_type}
+                      for t in db.scalars(select(TenderDocument).where(TenderDocument.job_id == j.id).order_by(TenderDocument.created_at))],
             "forms": [{"id": t.id, "name": t.name, "kind": t.kind} for t in db.scalars(select(FormTemplate).where(FormTemplate.active.is_(True)))
                       if t.kind not in ("test",) or j.sector == "maintenance"],
             "completed": j.work_status in ("complete", "invoiced", "closed"), "signed_by_name": j.signed_by_name}
@@ -334,6 +340,28 @@ def download(document_id: int, db: Session = Depends(get_db), user: User = Depen
                     headers={"Content-Disposition": f'inline; filename="{project.safe_name(d.filename)}"'})
 
 
+@router.get("/jobs/{job_id}/plans/{file_id}")
+def plan_file(job_id: int, file_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    _job(db, job_id, user)
+    f = get_or_404(db, DrawingFile, file_id)
+    if f.job_id != job_id:
+        raise HTTPException(404, "Plan not found")
+    return Response(storage.read_bytes(f.storage_key), media_type="application/pdf",
+                    headers={"Content-Disposition": f'inline; filename="{project.safe_name(f.filename)}"'})
+
+
+@router.get("/jobs/{job_id}/specs/{spec_id}")
+def spec_file(job_id: int, spec_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    import mimetypes
+
+    _job(db, job_id, user)
+    t = get_or_404(db, TenderDocument, spec_id)
+    if t.job_id != job_id:
+        raise HTTPException(404, "Document not found")
+    return Response(storage.read_bytes(t.storage_key), media_type=mimetypes.guess_type(t.filename)[0] or "application/octet-stream",
+                    headers={"Content-Disposition": f'inline; filename="{project.safe_name(t.filename)}"'})
+
+
 class NoteIn(BaseModel):
     text: str = Field(min_length=1)
     kind: str = "note"  # note | defect
@@ -357,29 +385,52 @@ def add_note(job_id: int, body: NoteIn, db: Session = Depends(get_db), user: Use
 
 
 class MaterialIn(BaseModel):
-    description: str = Field(min_length=1)
+    description: str = ""
     qty: float = Field(default=1, gt=0)
     unit: str = "ea"
-    unit_cost: float | None = Field(default=None, ge=0)
-    code: str = ""
+    code: str = ""  # a product from the price files / price book
+    supplier_id: int | None = None
+
+
+def add_material(db: Session, j: Job, body: MaterialIn, user: User, unit_cost: float | None = None, markup_pct: float | None = None) -> JobCost:
+    """Materials used from stock: a product code is costed at the price-file rate and sold at cost plus the margin.
+    Anything typed in without a code is recorded for the office to price."""
+    from .. import stock
+
+    p = stock.price(db, body.code, body.supplier_id) if body.code else None
+    if body.code and p is None and unit_cost is None:
+        raise HTTPException(422, "That product isn't in the price files any more. Type it in instead.")
+    if not body.code and not body.description.strip():
+        raise HTTPException(422, "What did you use?")
+    cost = unit_cost if unit_cost is not None else (p["cost"] if p else 0.0)
+    m = markup_pct if markup_pct is not None else (p["markup_pct"] if p else None)
+    desc = body.description.strip() or (p["description"] if p else "")
+    unit = body.unit if body.unit != "ea" or not p else (p["unit"] or "ea")
+    c = JobCost(job_id=j.id, day=ts.local_day(ts.now()), category="materials", description=f"{body.qty:g} {unit} {desc}"[:500], qty=body.qty,
+                unit_cost=cost, amount=round(body.qty * cost, 2), source="stock" if body.code else "field", user_id=user.id, ref=body.code,
+                markup_pct=m, sell_unit=round(cost * (1 + m / 100), 2) if m is not None and (p or unit_cost is not None) else None)
+    db.add(c)
+    db.flush()
+    return c
+
+
+@router.get("/products")
+def products(q: str = "", db: Session = Depends(get_db), user: User = Depends(current_user)):
+    """Search the stock list (supplier price files and the price book). People on the tools don't see prices."""
+    from .. import stock
+
+    rows = stock.search(db, q) if len(q.strip()) >= 2 else []
+    if user.role == "field":
+        rows = [{k: v for k, v in r.items() if k not in ("cost", "sell", "markup_pct", "supplier", "supplier_id")} for r in rows]
+    return rows
 
 
 @router.post("/jobs/{job_id}/materials")
 def use_material(job_id: int, body: MaterialIn, db: Session = Depends(get_db), user: User = Depends(current_user)):
-    """Materials used from the van or the yard. Priced from the supplier price lists when there's a code."""
     j = _job(db, job_id, user)
-    cost = body.unit_cost
-    if cost is None and body.code:
-        from ..supplier_prices import best_price
-
-        bp = best_price(db, body.code)
-        cost = bp["price"] if bp else None
-    c = JobCost(job_id=j.id, day=ts.local_day(ts.now()), category="materials", description=f"{body.qty:g} {body.unit} {body.description}",
-                qty=body.qty, unit_cost=cost or 0.0, amount=round(body.qty * (cost or 0.0), 2), source="field", user_id=user.id,
-                ref=body.code)
-    db.add(c)
+    c = add_material(db, j, body, user)
     db.commit()
-    return {"id": c.id, "amount": c.amount, "priced": cost is not None}
+    return {"id": c.id, "description": c.description, "priced": c.sell_unit is not None}
 
 
 class FieldPoIn(BaseModel):

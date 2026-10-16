@@ -106,7 +106,8 @@ const OPS_FIELDS: [string, string, string, "text" | "number"][] = [
   ["default_terms_days", "Payment terms (days)", "For customers with no terms set", "number"],
   ["default_cost_rate", "Default labour cost $/h", "For staff with no cost rate", "number"],
   ["default_charge_rate", "Charge-out rate $/h", "Do-and-charge jobs", "number"],
-  ["charge_materials_markup_pct", "Materials markup % (do-and-charge)", "", "number"],
+  ["charge_materials_markup_pct", "Markup % on other costs (do-and-charge)", "Bills and costs that aren't stock items", "number"],
+  ["stock_markup_pct", "Stock margin %", "Materials used from stock: price-file cost plus this", "number"],
   ["civil_budget_margin_pct", "Civil budget: margin taken off BOQ %", "", "number"],
   ["overtime_weekly_hours", "Overtime after (hours / week)", "", "number"],
   ["overtime_daily_hours", "Overtime after (hours / day)", "0 = weekly only", "number"],
@@ -121,7 +122,8 @@ export function OpsSettings() {
   const [pform, setP] = useState<Record<string, boolean | number>>({});
   const [run, error] = useAction();
   const [msg, setMsg] = useState("");
-  useEffect(() => { if (data) setForm(data); }, [data]);
+  const [groupsTxt, setGroupsTxt] = useState("");
+  useEffect(() => { if (data) { setForm(data); setGroupsTxt(groupText(data.markup_by_group)); } }, [data]);
   useEffect(() => { if (plant.data) setP(plant.data.settings); }, [plant.data]);
   if (!data) return null;
   return (
@@ -135,8 +137,11 @@ export function OpsSettings() {
             </Field>
           ))}
         </div>
+        <Field label="Margin by product group (one per line: group = %)" hint="Groups as they're named in the supplier price files, e.g. Hot water = 15">
+          <textarea rows={4} value={groupsTxt} onChange={(e) => setGroupsTxt(e.target.value)} />
+        </Field>
         <button className="primary" onClick={() => run(async () => {
-          const body = Object.fromEntries(OPS_FIELDS.map(([k]) => [k, form[k]]));
+          const body = { ...Object.fromEntries(OPS_FIELDS.map(([k]) => [k, form[k]])), markup_by_group: parseGroups(groupsTxt) };
           await api.put("/api/ops-settings", body); setMsg("Saved."); reload();
         })}>Save</button> {msg && <span className="ok small">{msg}</span>}
         <ErrorLine error={error} />
@@ -199,4 +204,16 @@ function FormTemplates() {
       )}
     </>
   );
+}
+
+function groupText(v: unknown): string {
+  return Object.entries((v as Record<string, number>) ?? {}).map(([k, n]) => `${k} = ${n}`).join("\n");
+}
+function parseGroups(text: string): Record<string, number> {
+  const out: Record<string, number> = {};
+  text.split("\n").forEach((line) => {
+    const m = /^(.+?)\s*[=:]\s*([\d.]+)\s*%?\s*$/.exec(line.trim());
+    if (m) out[m[1].trim()] = Number(m[2]);
+  });
+  return out;
 }

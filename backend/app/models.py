@@ -907,7 +907,9 @@ class JobCost(Base):
     amount: Mapped[float] = mapped_column(Float, default=0.0)  # qty x unit_cost, ex GST
     supplier: Mapped[str] = mapped_column(String(255), default="")
     ref: Mapped[str] = mapped_column(String(100), default="")
-    source: Mapped[str] = mapped_column(String(20), default="office")  # office | field | xero | reece
+    source: Mapped[str] = mapped_column(String(20), default="office")  # office | field | stock | xero | reece
+    sell_unit: Mapped[float | None] = mapped_column(Float, nullable=True)  # price to the customer each (stock items: price file + margin)
+    markup_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
     due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     paid_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     xero_id: Mapped[str] = mapped_column(String(64), default="")
