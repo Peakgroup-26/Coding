@@ -51,7 +51,7 @@ export function PricingTab({ jobId, locked, onJobChange }: { jobId: number; lock
         <section className="card">
           <div className="row wrap">
             <h2>Estimate</h2>
-            <span className="muted">on {p!.price_book!.label} · margins as {p!.margin_basis}</span>
+            <span className="muted">on {p!.price_book ? p!.price_book.label : "the workbook rates (no price book)"} · margins as {p!.margin_basis}</span>
             <span className="spacer" />
             <button onClick={() => download(`/api/jobs/${jobId}/simpro.csv`, "simpro.csv").catch((e) => setError(e.message))}
               disabled={!!(p!.unmapped.length || p!.missing_codes.length)}>Simpro CSV</button>
