@@ -10,7 +10,7 @@ from openpyxl import Workbook
 from app import chat, crm, messaging, scheduler, xero
 from app import timesheets as ts
 from app.db import SessionLocal
-from app.models import PlantCheck, TimeEntry
+from app.models import TimeEntry
 
 PNG = (b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00"
        b"\rIDATx\x9cc\xf8\x0f\x00\x00\x01\x01\x00\x05\x18\xd8N\x00\x00\x00\x00IEND\xaeB`\x82")
@@ -252,7 +252,7 @@ def test_crm_follow_ups_feedback_and_nps(client):
         client.put("/api/ops-settings", json={"google_review_url": "https://g.page/r/peak/review"})
         job = client.post("/api/work", json={"name": "Kitchen tap", "sector": "residential", "customer_id": cust["id"], "billing": "fixed",
                                              "contract_value": 450}).json()
-        inv = client.post("/api/invoices", json={"job_id": job["id"], "kind": "final", "amount": 450, "status": "sent"}).json()
+        client.post("/api/invoices", json={"job_id": job["id"], "kind": "final", "amount": 450, "status": "sent"})
         msgs = [m for m in client.get("/api/crm/messages").json() if m["customer_id"] == cust["id"]]
         assert len(msgs) == 1 and msgs[0]["status"] == "queued" and "/feedback/" in msgs[0]["body"]
         # Not yet due (2 days, 9am); then it's due

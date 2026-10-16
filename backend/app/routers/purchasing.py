@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from .. import ops, purchasing
 from ..access import can_see_job
-from ..audit import record, snapshot
+from ..audit import record
 from ..auth import current_user
 from ..db import get_db
 from ..models import Customer, Invoice, Job, JobCost, PoLine, PurchaseOrder, Supplier, User, Variation

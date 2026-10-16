@@ -197,7 +197,7 @@ def crew(body: CrewIn, db: Session = Depends(get_db), user: User = Depends(curre
             if ts.clock_out(db, u, body.lat, body.lng, f"Clocked off by {user.name or user.email}"):
                 done.append(u.name or u.email)
         else:
-            e = ts.clock_in(db, u, body.job_id, body.task, body.lat, body.lng, source="crew", notes=f"Clocked on by {user.name or user.email}")
+            ts.clock_in(db, u, body.job_id, body.task, body.lat, body.lng, source="crew", notes=f"Clocked on by {user.name or user.email}")
             done.append(u.name or u.email)
     db.commit()
     return {"done": done}

@@ -25,7 +25,7 @@ from sqlalchemy.orm import Session
 
 from .auth import _bearer, read_token
 from .db import get_db
-from .models import (Asset, BudgetLine, CivilBoqLine, CountItem, DailyLog, Document, Flag, FormResponse, GeneratedItem, Invoice,
+from .models import (BudgetLine, CivilBoqLine, CountItem, DailyLog, Document, Flag, FormResponse, GeneratedItem, Invoice,
                      Job, JobAllowance, JobCost, Level, ProjectItem, PurchaseOrder, Run, ScheduleEntry, Sheet, TenderDocument,
                      TenderRequirement, TimeEntry, User, Variation, Viewport)
 
