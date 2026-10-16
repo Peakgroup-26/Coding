@@ -595,3 +595,4 @@ button.danger.big-btn { background: var(--bad); color: #fff; border-color: var(-
 .ask-panel .bubble.user { color: #fff; }
 .topbar .ask-panel button.link, .topbar .bell-menu button.link { color: var(--accent); }
 .field-top .ask-label { display: none; } .field-top .ask-btn { padding: 4px 10px; }
+.photo-row > *, .photo-btn, .photo-btn button { min-width: 0; box-sizing: border-box; } .photo-btn span { overflow-wrap: anywhere; }
