@@ -38,7 +38,7 @@ def create_app() -> FastAPI:
     for r in (auth_users.router, settings.router, jobs.router, sheets.router, takeoff.router, rules.router, estimate.router, pricing.router, ai.router, polish.router,
               autopilot.router, civil.router, tender.router, chat.router, reports.router,
               sales.router, ops.router, time.router, field.router, purchasing.router, project.router, money.router, assistant.router,
-              people.router, people.me, boards.router, boards.field, workbook.router):
+              people.router, people.me, people.director, boards.router, boards.field, workbook.router):
         app.include_router(r, dependencies=[Depends(enforce)])  # access.enforce: who can see which job
     app.include_router(money.public)  # feedback forms and the Xero sign-in return: no sign-in needed
     app.include_router(people.public)  # the careers page and job applications

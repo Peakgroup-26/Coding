@@ -103,7 +103,9 @@ def test_sqlite_migrations_run_on_a_database_with_data(tmp_path):
                           " VALUES (1, '2026-01-01', 'hourly', 40, '', '', '', '2026-01-01')"))
     migrate(eng)
     with eng.connect() as conn:
-        assert conn.execute(text("SELECT version_num FROM alembic_version")).scalar() == "0011"
+        from alembic.script import ScriptDirectory
+
+        assert conn.execute(text("SELECT version_num FROM alembic_version")).scalar() == ScriptDirectory.from_config(cfg).get_current_head()
         assert conn.execute(text("SELECT count(*) FROM pay_changes")).scalar() == 1
         assert conn.execute(text("PRAGMA foreign_keys")).scalar() == 1
     eng.dispose()

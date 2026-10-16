@@ -35,6 +35,8 @@ import People, { PersonPage } from "./pages/People";
 import Boards, { BoardPage, MyWork } from "./pages/Boards";
 import { RateLibrary } from "./pages/Workbook";
 import { BoardFormPage, Careers } from "./pages/PublicPages";
+import Director from "./pages/Director";
+import { SurveyGate } from "./pages/FieldMe";
 
 interface Ctx { user: User; settings: Settings; reloadSettings: () => Promise<void> }
 const AppCtx = createContext<Ctx | null>(null);
@@ -112,7 +114,8 @@ export default function App() {
   const fin = can(user, "can_finance");
   const hr = can(user, "can_hr");
   const groups: { label: string; links: [string, string, boolean][] }[] = [
-    { label: "Work", links: [["/my-work", "My work", true], ["/boards", "Boards", true]] },
+    { label: "Work", links: [["/director", "Director's dashboard", true], ["/my-work", "My work", true], ["/boards", "Boards", true],
+      ["/field/me/feedback", "Feedback to my manager", true]] },
     { label: "Estimating", links: [["/", "Tenders & quotes", true], ["/sales", "Sales", true], ["/rate-library", "Rate library", true],
       ["/civil-rates", "Civil rates", can(user, "can_past_rates") && can(user, "can_civil")],
       ["/price-books", "Price books", can(user, "can_hydraulic")], ["/rules", "Fitting rules", can(user, "can_hydraulic")],
@@ -129,7 +132,7 @@ export default function App() {
       ["/purchasing?tab=prices", "Supplier prices", fin], ["/reports", "Job reports", true]] },
   ];
   const FEATURE_OF: Record<string, string> = {
-    "/my-work": "my_work", "/boards": "boards", "/": "tenders", "/jobs": "tenders", "/sales": "sales", "/rate-library": "rate_library",
+    "/director": "director", "/my-work": "my_work", "/boards": "boards", "/": "tenders", "/jobs": "tenders", "/sales": "sales", "/rate-library": "rate_library",
     "/civil-rates": "civil_rates", "/price-books": "price_books", "/rules": "rules", "/mappings": "mappings", "/work": "live_jobs",
     "/schedule": "schedule", "/timesheets": "timesheets", "/purchasing": "purchasing", "/plant": "plant", "/maintenance": "maintenance",
     "/documents": "documents", "/customers": "customers", "/crm": "crm", "/finance": "finance", "/finance?tab=wip": "finance",
@@ -163,6 +166,7 @@ export default function App() {
           <Link to="/account" className="muted who">{user.name || user.email}</Link>
           <button className="link" onClick={logout}>Sign out</button>
         </header>
+        <SurveyGate />
         <Routes>
           <Route path="/" element={sees(user, "tenders") ? G("tenders", <Home />) : <Navigate to={sees(user, "my_work") ? "/my-work" : "/field"} />} />
           <Route path="/jobs" element={G("tenders", <Jobs />)} />
@@ -194,6 +198,7 @@ export default function App() {
           <Route path="/boards" element={G("boards", <Boards />)} />
           <Route path="/boards/:boardId" element={G("boards", <BoardPage />)} />
           <Route path="/my-work" element={G("my_work", <MyWork />)} />
+          <Route path="/director" element={G("director", <Director />)} />
           <Route path="/rate-library" element={G("rate_library", <RateLibrary />)} />
           <Route path="/field/*" element={<FieldApp />} />
           <Route path="/admin" element={user.role === "admin" ? <AdminPortal /> : <Navigate to="/" />} />

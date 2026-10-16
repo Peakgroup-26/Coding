@@ -808,3 +808,29 @@ table.access-grid { border-collapse: collapse; font-size: 12px; }
 .access-grid td.lv-edit { color: var(--ok); } .access-grid td.lv-view { background: var(--peach-soft); } .access-grid td.lv-none { color: #c9c1ba; background: #faf9f7; }
 .access-grid td.own { box-shadow: inset 0 0 0 2px var(--orange); }
 @media (max-width: 720px) { .access-layout { grid-template-columns: 1fr; } .access-people { position: static; max-height: 220px; } }
+
+/* Team survey that must be answered */
+.survey-gate { position: fixed; inset: 0; z-index: 200; background: rgba(14,14,14,.82); display: flex; align-items: center; justify-content: center; padding: 16px; overflow-y: auto; }
+.survey-card { background: #fff; border-radius: 16px; padding: 22px; width: min(520px, 100%); max-height: calc(100vh - 32px); overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,.4);
+  display: flex; flex-direction: column; gap: 12px; border-top: 6px solid var(--orange); }
+.survey-mark { width: 42px; height: auto; }
+.survey-card h2 { margin: 0; font-size: 20px; }
+.survey-q { display: flex; flex-direction: column; gap: 6px; }
+.survey-q textarea { min-height: 60px; }
+.nps-scale button.lo.on { background: var(--bad); border-color: var(--bad); }
+.nps-scale button.mid.on { background: #e0a100; border-color: #e0a100; }
+.nps-scale button.hi.on { background: var(--ok); border-color: var(--ok); }
+/* Feedback */
+.moods { display: flex; gap: 8px; margin-top: 4px; }
+.moods button { font-size: 26px; padding: 4px 8px; background: #fff; border-radius: 10px; filter: grayscale(.8); }
+.moods button.on { filter: none; border-color: var(--orange); background: var(--peach-soft); }
+.reply-box { background: var(--peach-soft); border-radius: 8px; padding: 8px 10px; margin: 6px 0 0; white-space: pre-wrap; }
+.fb-new { border-left: 4px solid var(--orange); }
+.feedback-link { border-color: var(--peach); background: var(--peach-soft); }
+/* Director */
+.tile.big b { font-size: 34px; }
+.nps-lines { width: 100%; height: auto; display: block; }
+.legend { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; margin-left: 14px; }
+.legend i { width: 18px; height: 4px; border-radius: 2px; display: inline-block; }
+.pd-bar { display: flex; height: 12px; border-radius: 6px; overflow: hidden; background: #f1ede9; }
+.pd-bar i { display: block; } .pd-bar i.p { background: var(--ok); } .pd-bar i.m { background: #e0c27a; } .pd-bar i.d { background: var(--bad); }

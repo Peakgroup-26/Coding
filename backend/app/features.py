@@ -19,6 +19,7 @@ FEATURES: list[tuple[str, str, str, list[str], list[str]]] = [
     # Work
     ("my_work", "Work", "My work", ["/my-work"], [r"^/api/my-work"]),
     ("boards", "Work", "Boards (tasks, programmes, safety, forms)", ["/boards"], [r"^/api/boards"]),
+    ("director", "Work", "Director's dashboard (team and client NPS)", ["/director"], [r"^/api/director\b"]),
     ("assistant", "Work", "Ask Lorojo and the AI chat", [], [r"^/api/assistant", r"^/api/jobs/\d+/chat", r"^/api/memories"]),
     # Estimating
     ("tenders", "Estimating", "Tenders & quotes: drawings, take-off, fittings, pricing, check-measure",
@@ -123,6 +124,10 @@ POSITIONS: list[tuple[str, str, dict[str, str]]] = [
      "field_crew": "none", "field_jobs": "view"}),
 ]
 
+for _name, _d, _feats in POSITIONS:  # the director's dashboard is for the director and the office manager
+    if _name not in ("Director", "Office manager"):
+        _feats["director"] = "none"
+
 
 def feature_for(path: str) -> str | None:
     for rx, key in _RULES:
@@ -172,6 +177,16 @@ def seed(db: Session) -> None:
     from .models import Position
 
     if db.scalar(select(Position.id).limit(1)):
+        # Features added since the positions were made: take them from the preset of the same name, else hidden
+        presets = {name: feats for name, _d, feats in POSITIONS}
+        for p in db.scalars(select(Position)):
+            have = dict(p.features or {})
+            missing = [k for k in KEYS if k not in have]
+            if missing:
+                for k in missing:
+                    have[k] = presets.get(p.name, {}).get(k, "none")
+                p.features = have
+        db.flush()
         return
     for i, (name, desc, feats) in enumerate(POSITIONS):
         db.add(Position(name=name, description=desc, features=feats, position=i))

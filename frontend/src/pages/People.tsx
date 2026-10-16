@@ -384,14 +384,14 @@ function Reviews() {
   );
 }
 
-interface SurveyRow { id: number; title: string; status: string; anonymous: boolean; audience: string; responses: number; invited: number; response_rate: number | null }
+interface SurveyRow { id: number; title: string; status: string; anonymous: boolean; required: boolean; audience: string; responses: number; invited: number; response_rate: number | null }
 interface SurveyRes { title: string; responses: number; invited: number; response_rate: number | null; questions: { key: string; label: string; type: string; answers: number;
   average?: number | null; enps?: number | null; by_department?: { department: string; enps: number | null; answers: number }[]; counts?: Record<string, number>; texts?: string[] }[] }
 function Surveys() {
   const { data, reload } = useLoad<SurveyRow[]>("/api/people/surveys");
   const [open, setOpen] = useState<number | null>(null);
   const { data: res } = useLoad<SurveyRes>(open ? `/api/people/surveys/${open}` : null, [open]);
-  const [f, setF] = useState({ title: "", audience: "all", anonymous: true });
+  const [f, setF] = useState({ title: "", audience: "all", anonymous: true, required: true });
   const [run, err, busy] = useAction();
   if (!data) return <p className="muted">Loading…</p>;
   return (
@@ -402,13 +402,14 @@ function Surveys() {
           <input placeholder="e.g. November pulse" value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} />
           <select value={f.audience} onChange={(e) => setF({ ...f, audience: e.target.value })}><option value="all">Everyone</option><option value="field">The boys on the tools</option><option value="office">The office</option></select>
           <label className="inline small"><input type="checkbox" checked={f.anonymous} onChange={(e) => setF({ ...f, anonymous: e.target.checked })} /> Anonymous</label>
+          <label className="inline small" title="It pops up over the app and stays until they answer"><input type="checkbox" checked={f.required} onChange={(e) => setF({ ...f, required: e.target.checked })} /> Must answer (pops up until done)</label>
           <button className="primary" disabled={busy || !f.title} onClick={() => run(async () => { await api.post("/api/people/surveys", f); setF({ ...f, title: "" }); await reload(); })}>Send</button>
         </div>
         <p className="small muted">Asks "How likely are you to recommend Peak as a place to work?" (0–10), why, and one thing to do better. Answers come in on the phone.</p>
         <ErrorLine error={err} />
       </section>
       <DataTable rows={data} onRow={(s) => setOpen(s.id)} cols={[
-        { key: "t", label: "Survey", render: (s) => s.title }, { key: "a", label: "Who", render: (s) => s.audience },
+        { key: "t", label: "Survey", render: (s) => s.title }, { key: "a", label: "Who", render: (s) => `${s.audience}${s.required ? " · must answer" : ""}` },
         { key: "r", label: "Answers", num: true, render: (s) => `${s.responses} / ${s.invited}` },
         { key: "s", label: "", render: (s) => <Status value={s.status} /> },
       ]} />

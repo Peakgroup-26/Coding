@@ -15,7 +15,7 @@ from ..audit import record
 from ..auth import ROLES, current_user, hash_password
 from ..db import get_db
 from ..models import (Announcement, Candidate, CandidateNote, ChecklistTask, ChecklistTemplate, Credential, CredentialType,
-                      EmployeeFile, EmployeeProfile, Goal, IssuedItem, JobOpening, LeaveAdjustment, LeavePolicy, PayChange, Policy,
+                      EmployeeFeedback, EmployeeFile, EmployeeProfile, Goal, IssuedItem, JobOpening, LeaveAdjustment, LeavePolicy, PayChange, Policy,
                       PolicySignature, Review, ReviewCycle, Survey, SurveyInvite, SurveyResponse, TimeOff, User)
 from ..plant import notify
 from . import get_or_404
@@ -711,11 +711,12 @@ class SurveyIn(BaseModel):
     anonymous: bool = True
     audience: str = Field(default="all", pattern="^(all|field|office)$")
     closes: date | None = None
+    required: bool = True  # pops up and stays until they answer
 
 
 @router.get("/surveys")
 def list_surveys(db: Session = Depends(get_db), _: User = Depends(current_user)):
-    return [{"id": s.id, "title": s.title, "status": s.status, "anonymous": s.anonymous, "audience": s.audience, "closes": _iso(s.closes),
+    return [{"id": s.id, "title": s.title, "status": s.status, "anonymous": s.anonymous, "audience": s.audience, "closes": _iso(s.closes), "required": s.required,
              "questions": s.questions, **{k: v for k, v in hr.survey_results(db, s).items() if k in ("responses", "invited", "response_rate")}}
             for s in db.scalars(select(Survey).order_by(Survey.created_at.desc()))]
 
@@ -727,7 +728,7 @@ def add_survey(body: SurveyIn, db: Session = Depends(get_db), _: User = Depends(
     for i, q in enumerate(qs):
         q.setdefault("key", f"q{i + 1}")
         q.setdefault("type", "text")
-    s = Survey(title=body.title, questions=qs, anonymous=body.anonymous, audience=body.audience, closes=body.closes)
+    s = Survey(title=body.title, questions=qs, anonymous=body.anonymous, audience=body.audience, closes=body.closes, required=body.required)
     db.add(s)
     db.flush()
     n = hr.open_survey(db, s)
@@ -1203,6 +1204,65 @@ def answer_survey(survey_id: int, body: dict, db: Session = Depends(get_db), use
     return {"ok": True}
 
 
+@me.get("/pending-surveys")
+def pending_surveys(db: Session = Depends(get_db), user: User = Depends(current_user)):
+    """Surveys that must be answered: the app shows them over everything until they're done."""
+    return [{"id": s.id, "title": s.title, "anonymous": s.anonymous, "questions": s.questions} for s in hr.pending_surveys(db, user)]
+
+
+class FeedbackIn(BaseModel):
+    kind: str = Field(default="idea", pattern="^(idea|concern|praise|safety|workload|other)$")
+    subject: str = Field(min_length=1, max_length=200)
+    body: str = Field(default="", max_length=10000)
+    mood: int | None = Field(default=None, ge=1, le=5)
+
+
+@me.get("/feedback")
+def my_feedback(db: Session = Depends(get_db), user: User = Depends(current_user)):
+    names = _names(db)
+    to = hr.feedback_to(db, user)
+    q = select(EmployeeFeedback).order_by(EmployeeFeedback.created_at.desc())
+    return {"goes_to": {"user_id": to.id, "name": to.name or to.email} if to else None, "kinds": hr.FEEDBACK_KINDS,
+            "sent": [hr.feedback_out(f, names) for f in db.scalars(q.where(EmployeeFeedback.from_user_id == user.id))],
+            "received": [hr.feedback_out(f, names) for f in db.scalars(q.where(EmployeeFeedback.to_user_id == user.id))]}
+
+
+@me.post("/feedback")
+def send_feedback(body: FeedbackIn, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    to = hr.feedback_to(db, user)
+    if to is None:
+        raise HTTPException(409, "There's nobody set up to receive feedback yet")
+    f = EmployeeFeedback(from_user_id=user.id, to_user_id=to.id, **body.model_dump())
+    db.add(f)
+    db.flush()
+    who = user.name or user.email
+    notify(db, to.id, "feedback", f"{hr.FEEDBACK_KINDS[f.kind]} from {who}: {f.subject}", "/field/me/feedback", key=f"efb-{f.id}")
+    db.commit()
+    return {"id": f.id, "to": to.name or to.email}
+
+
+class FeedbackReply(BaseModel):
+    status: str | None = Field(default=None, pattern="^(sent|read|actioned)$")
+    reply: str | None = Field(default=None, max_length=10000)
+
+
+@me.put("/feedback/{fb_id}")
+def answer_feedback(fb_id: int, body: FeedbackReply, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    f = get_or_404(db, EmployeeFeedback, fb_id)
+    if f.to_user_id != user.id:
+        raise HTTPException(404, "Not found")
+    if body.status:
+        f.status = body.status
+    if body.reply:
+        f.reply, f.replied_at = body.reply, datetime.now(timezone.utc)
+        if f.status == "sent":
+            f.status = "read"
+        notify(db, f.from_user_id, "feedback", f"{user.name or user.email} replied about \"{f.subject}\"", "/field/me/feedback",
+               key=f"efb-reply-{f.id}-{int(f.replied_at.timestamp())}")
+    db.commit()
+    return hr.feedback_out(f, _names(db))
+
+
 @me.put("/tasks/{task_id}")
 def my_task(task_id: int, body: TaskIn, db: Session = Depends(get_db), user: User = Depends(current_user)):
     t = get_or_404(db, ChecklistTask, task_id)
@@ -1260,3 +1320,43 @@ async def apply(opening_id: int, name: str = Form(..., min_length=2, max_length=
         notify(db, o.hiring_manager_id, "hiring", f"New application for {o.title}: {c.name}", "/people?tab=hiring", key=f"cand-{c.id}-m")
     db.commit()
     return {"ok": True}
+
+
+# ============ the director's dashboard ============
+director = APIRouter(prefix="/api/director", tags=["director"])
+
+
+@director.get("")
+def director_dashboard(months: int = 12, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    """Team eNPS and client NPS month by month, with the people and money headlines the director looks at."""
+    from .. import crm, features
+    from ..access import has
+
+    months = max(3, min(24, months))
+    team = hr.enps_by_month(db, months)
+    clients = crm.nps_report(db, months)
+    by_month = {m["month"]: m for m in clients["by_month"]}
+    client_months = [{"month": t["month"], "nps": by_month.get(t["month"], {}).get("nps"), "responses": by_month.get(t["month"], {}).get("responses", 0),
+                      "departments": by_month.get(t["month"], {}).get("departments", {})} for t in team]
+    open_s = [s for s in db.scalars(select(Survey).where(Survey.status == "open"))]
+    waiting = 0
+    for s in open_s:
+        waiting += len(list(db.scalars(select(SurveyInvite.id).where(SurveyInvite.survey_id == s.id, SurveyInvite.answered.is_(False)))))
+    rep = hr.report(db)
+    out = {"team": team, "clients": client_months,
+           "team_now": next((t for t in reversed(team) if t["responses"]), None),
+           "clients_now": next((c for c in reversed(client_months) if c["responses"]), None),
+           "clients_overall": clients["overall"], "client_departments": clients["by_department"], "client_types": clients["by_client_type"],
+           "recent_client_comments": [r for r in clients["recent"] if r["comment"]][:6],
+           "surveys_waiting": waiting, "open_surveys": len(open_s),
+           "people": {"headcount": rep["headcount"], "turnover_pct": rep["turnover_pct"], "licence_problems": len(rep["compliance"]),
+                      "feedback_open": db.scalar(select(func.count()).select_from(EmployeeFeedback).where(EmployeeFeedback.status == "sent")) or 0}}
+    if has(user, "can_finance") and features.level(db, user, "finance") != "none":
+        from .. import finance
+        from .money import _jobs
+
+        try:
+            out["money"] = finance.month_to_date(db, _jobs(db, user))
+        except Exception:  # noqa: BLE001 - the NPS still shows if the money side can't be worked out
+            out["money"] = None
+    return out

@@ -99,7 +99,7 @@ def test_updates_mentions_files_timer_and_private_boards(client):
 def test_dated_and_recurring_automations_my_work_and_the_phone(client):
     tradie, th = _user(client, "tradie-board@test.local", name="Tradie Tom", role="field", trade="plumber")
     b = client.post("/api/boards", json={"template": "tenders"}).json()
-    tomorrow2 = date.today() + timedelta(days=2)
+    tomorrow2 = local_day(datetime.now(timezone.utc)) + timedelta(days=2)  # Brisbane's date, as the automations use
     t = client.post(f"/api/boards/{b['id']}/items", json={"name": "Sippy Downs school", "values": {
         "estimator": [tradie], "stage": "pricing", "due": str(tomorrow2), "value": 250000}}).json()
     with SessionLocal() as db:

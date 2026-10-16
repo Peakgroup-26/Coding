@@ -909,7 +909,7 @@ interface WorkItem { board_id: number; board: string; item_id: number; name: str
 export function MyWork() {
   const { data, reload } = useLoad<{ items: WorkItem[]; tasks: { id: number; title: string; due: string | null; done: boolean; overdue: boolean; person: string; user_id: number }[];
     policies: { id: number; title: string }[]; reviews: { id: number; cycle: string; as: string; person: string; due: string | null }[]; surveys: { id: number; title: string }[];
-    announcements: { id: number; title: string; body: string; pinned: boolean }[] }>("/api/my-work");
+    announcements: { id: number; title: string; body: string; pinned: boolean }[]; feedback_waiting?: number }>("/api/my-work");
   const [run, err] = useAction();
   if (!data) return <main className="page"><p className="muted">Loading…</p></main>;
   const buckets = ["overdue", "today", "this week", "next week", "later", "no date"];
@@ -917,6 +917,7 @@ export function MyWork() {
     <main className="page">
       <h1>My work</h1>
       {data.announcements.slice(0, 3).map((a) => <div key={a.id} className={`news ${a.pinned ? "pinned" : ""}`}><b>{a.title}</b>{a.body && <p>{a.body}</p>}</div>)}
+      {(data.feedback_waiting ?? 0) > 0 && <Link to="/field/me/feedback" className="todo">💬 {data.feedback_waiting} feedback from your team to read<span>›</span></Link>}
       {(data.policies.length + data.reviews.length + data.surveys.length + data.tasks.length) > 0 && (
         <section className="card">
           <h2>People</h2>

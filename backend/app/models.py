@@ -1523,6 +1523,7 @@ class Survey(Base):
     audience: Mapped[str] = mapped_column(String(20), default="all")  # all | field | office
     status: Mapped[str] = mapped_column(String(20), default="open")  # open | closed
     closes: Mapped[date | None] = mapped_column(Date, nullable=True)
+    required: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())  # pops up and stays until answered
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
@@ -1879,3 +1880,19 @@ class TenderProgramme(Base):
     terms_days: Mapped[int] = mapped_column(Integer, default=30)
     pay_suppliers_days: Mapped[int] = mapped_column(Integer, default=30)
     activities: Mapped[list] = mapped_column(JSON, default=list)  # [{name, stages: [...], sections: [...], start_week, weeks, curve}]
+
+
+class EmployeeFeedback(Base):
+    """Feedback a person sends to whoever they report to, any time: an idea, a concern, praise, a safety worry."""
+    __tablename__ = "employee_feedback"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    from_user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    to_user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    kind: Mapped[str] = mapped_column(String(20), default="idea")  # idea | concern | praise | safety | workload | other
+    subject: Mapped[str] = mapped_column(String(200))
+    body: Mapped[str] = mapped_column(Text, default="")
+    mood: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 1-5, how they're going
+    status: Mapped[str] = mapped_column(String(20), default="sent")  # sent | read | actioned
+    reply: Mapped[str] = mapped_column(Text, default="")
+    replied_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

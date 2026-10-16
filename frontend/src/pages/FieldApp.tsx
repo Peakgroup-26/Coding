@@ -6,7 +6,7 @@ import { Link, NavLink, Route, Routes, useNavigate, useParams } from "react-rout
 import { api, ApiError, fetchBlobUrl, upload } from "../api";
 import { sees, useApp } from "../App";
 import { AskPeakButton } from "./AskPeak";
-import { Directory, FieldBoardItem, MeTab, MyBoardItems, ReviewForm, SignPolicy, SurveyForm, WorkItem } from "./FieldMe";
+import { Directory, FeedbackPage, FieldBoardItem, MeTab, MyBoardItems, ReviewForm, SignPolicy, SurveyForm, SurveyGate, WorkItem } from "./FieldMe";
 import { addDays, DocOut, ErrorLine, fmtDay, getLocation, shrinkImage, hrs, monday, num, PhotoButton, SignaturePad, todayIso, useAction, useLoad } from "../ui";
 
 interface Entry { id: number; job_id: number | null; job_no: string; job: string; task: string; start_at: string; end_at: string | null; local_day: string;
@@ -73,6 +73,7 @@ export default function FieldApp({ onLogout }: { onLogout?: () => void }) {
         {user.role !== "field" && <Link to="/" className="small">Back to the office app</Link>}
         {onLogout && <button className="link small" onClick={onLogout}>Sign out</button>}
       </header>
+      {user.role === "field" && <SurveyGate />}
       {queued > 0 && <div className="offline-bar">{queued} punch{queued > 1 ? "es" : ""} saved on this phone, sending when you're back online.</div>}
       <main className="field-main">
         <Routes>
@@ -89,6 +90,7 @@ export default function FieldApp({ onLogout }: { onLogout?: () => void }) {
           <Route path="me/review/:id" element={<ReviewForm />} />
           <Route path="me/survey/:id" element={<SurveyForm />} />
           <Route path="me/people" element={<Directory />} />
+          <Route path="me/feedback" element={<FeedbackPage />} />
           <Route path="work/:itemId" element={<FieldBoardItem />} />
         </Routes>
       </main>

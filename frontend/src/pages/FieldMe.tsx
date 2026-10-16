@@ -1,7 +1,7 @@
 /* The phone's "Me" tab (BambooHR self-service): news, things to do (sign a policy, a review, a survey, onboarding steps),
    leave balances and what they'll be by a date, licences and tickets (snap a photo of the card), my details, gear and files,
    and the team directory. Plus board items assigned to me (Monday.com on the phone). */
-import { Fragment, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, fetchBlobUrl, upload } from "../api";
 import { Avatar, ErrorLine, fmtDate, num, shrinkImage, SignaturePad, Status, todayIso, useAction, useLoad } from "../ui";
@@ -12,6 +12,7 @@ export interface Cred { id: number; type: string; type_id: number; category: str
   status: string; has_file: boolean; verified: boolean; notes?: string; name?: string; user_id?: number; hours?: number | null; cost?: number | null }
 interface Task { id: number; title: string; due: string | null; done: boolean; overdue: boolean; person: string; kind: string; who: string; assignee: string; user_id: number }
 interface MyHr {
+  feedback_waiting?: number;
   tasks: Task[]; policies: { id: number; title: string; version: number }[];
   reviews: { id: number; cycle: string; due: string | null; as: string; person: string }[];
   surveys: { id: number; title: string; anonymous: boolean }[];
@@ -46,6 +47,7 @@ export function MeTab() {
   return (
     <div className="stack">
       <div className="hello"><h1>{me.profile.name}</h1><span className="muted">{me.profile.position || ""}{me.profile.manager ? ` · reports to ${me.profile.manager}` : ""}</span></div>
+      <Link to="/field/me/feedback" className="todo feedback-link">💬 Send feedback to {me.profile.manager || "the office"}{me.feedback_waiting ? <b> · {me.feedback_waiting} from your team</b> : ""}<span>›</span></Link>
       {me.announcements.map((a) => (
         <div key={a.id} className={`news ${a.pinned ? "pinned" : ""}`}><b>{a.pinned && "📌 "}{a.title}</b>{a.body && <p>{a.body}</p>}<small className="muted">{fmtDate(a.at)}</small></div>
       ))}
@@ -424,5 +426,113 @@ export function FieldBoardItem() {
           <button key={f.id} className="link" onClick={async () => window.open(await fetchBlobUrl(`/api/field/my-work/files/${f.id}`))}>📎 {f.filename}</button>))}</div>}
       </section>
     </div>
+  );
+}
+
+/* --- team surveys that must be answered: shown over everything until done --- */
+interface Pending { id: number; title: string; anonymous: boolean; questions: { key: string; label: string; type: string; options?: string[] }[] }
+
+export function SurveyGate() {
+  const [list, setList] = useState<Pending[]>([]);
+  const [a, setA] = useState<Record<string, unknown>>({});
+  const [run, err, busy] = useAction();
+  const load = () => api.get<Pending[]>("/api/field/me/pending-surveys").then(setList).catch(() => undefined);
+  useEffect(() => {
+    load();
+    const t = setInterval(load, 5 * 60 * 1000);
+    window.addEventListener("focus", load);
+    return () => { clearInterval(t); window.removeEventListener("focus", load); };
+  }, []);
+  const s = list[0];
+  if (!s) return null;
+  const missing = s.questions.filter((q) => (q.type === "enps" || q.type === "rating") && (a[q.key] === undefined || a[q.key] === ""));
+  return (
+    <div className="survey-gate" role="dialog" aria-modal="true" aria-label={s.title}>
+      <div className="survey-card">
+        <img src="/brand/lorojo-mark.png" alt="" className="survey-mark" />
+        <h2>{s.title}</h2>
+        <p className="small muted">Takes 20 seconds. {s.anonymous ? "Anonymous: your name isn't kept with your answers." : ""} This stays here until it's done.</p>
+        {s.questions.map((q) => (
+          <div key={q.key} className="survey-q">
+            <b>{q.label}</b>
+            {q.type === "enps" && <><div className="nps-scale">{Array.from({ length: 11 }, (_, n) => (
+              <button key={n} type="button" className={`${a[q.key] === n ? "on" : ""} ${n <= 6 ? "lo" : n <= 8 ? "mid" : "hi"}`} onClick={() => setA({ ...a, [q.key]: n })}>{n}</button>))}</div>
+              <div className="row small muted" style={{ margin: 0 }}><span>Not likely</span><span className="spacer" /><span>Very likely</span></div></>}
+            {q.type === "rating" && <div className="nps-scale five">{[1, 2, 3, 4, 5].map((n) => (
+              <button key={n} type="button" className={a[q.key] === n ? "on" : ""} onClick={() => setA({ ...a, [q.key]: n })}>{n}</button>))}</div>}
+            {q.type === "choice" && <div className="chips">{(q.options || []).map((o) => (
+              <button key={o} type="button" className={`chip ${a[q.key] === o ? "on" : ""}`} onClick={() => setA({ ...a, [q.key]: o })}>{o}</button>))}</div>}
+            {q.type === "text" && <textarea placeholder="Optional" value={(a[q.key] as string) || ""} onChange={(e) => setA({ ...a, [q.key]: e.target.value })} />}
+          </div>
+        ))}
+        <button className="primary big-btn" disabled={busy || missing.length > 0} onClick={() => run(async () => {
+          await api.post(`/api/field/me/surveys/${s.id}`, { answers: a }); setA({}); await load();
+        })}>{missing.length ? "Pick a score to send" : "Send"}</button>
+        <ErrorLine error={err} />
+        {list.length > 1 && <p className="small muted">{list.length - 1} more after this one.</p>}
+      </div>
+    </div>
+  );
+}
+
+/* --- feedback to whoever you report to --- */
+interface Fb { id: number; from: string; to: string; kind: string; kind_label: string; subject: string; body: string; mood: number | null; status: string; reply: string; replied_at: string | null; at: string }
+const MOODS = ["😣", "😕", "😐", "🙂", "😄"];
+
+export function FeedbackPage({ back = "/field/me" }: { back?: string }) {
+  const { data, reload } = useLoad<{ goes_to: { name: string } | null; kinds: Record<string, string>; sent: Fb[]; received: Fb[] }>("/api/field/me/feedback");
+  const [f, setF] = useState({ kind: "idea", subject: "", body: "", mood: 0 });
+  const [done, setDone] = useState("");
+  const [tab, setTab] = useState<"send" | "inbox">("send");
+  const [run, err, busy] = useAction();
+  if (!data) return <p className="muted">Loading…</p>;
+  const waiting = data.received.filter((x) => x.status === "sent").length;
+  return (
+    <div className="stack">
+      <Link to={back}>‹ Back</Link>
+      <h1>Feedback</h1>
+      {data.received.length > 0 && <div className="tabs"><button className={tab === "send" ? "active" : ""} onClick={() => setTab("send")}>Send feedback</button>
+        <button className={tab === "inbox" ? "active" : ""} onClick={() => setTab("inbox")}>From my team{waiting ? ` (${waiting} new)` : ""}</button></div>}
+      {tab === "send" ? (
+        <>
+          <section className="card form">
+            <p className="small">Goes straight to <b>{data.goes_to?.name ?? "the office"}</b>. Ideas, worries, a shout-out for someone, safety, workload — anything.</p>
+            {done && <p className="ok">Sent to {done}. You'll see their reply here.</p>}
+            <div className="chips">{Object.entries(data.kinds).map(([k, l]) => <button key={k} type="button" className={`chip ${f.kind === k ? "on" : ""}`} onClick={() => setF({ ...f, kind: k })}>{l}</button>)}</div>
+            <label>What's it about<input value={f.subject} onChange={(e) => setF({ ...f, subject: e.target.value })} placeholder="e.g. Shoring box for the deep trenches" /></label>
+            <label>Tell them more<textarea rows={5} value={f.body} onChange={(e) => setF({ ...f, body: e.target.value })} /></label>
+            <div><span className="small muted">How are you going?</span>
+              <div className="moods">{MOODS.map((m, i) => <button key={i} type="button" className={f.mood === i + 1 ? "on" : ""} onClick={() => setF({ ...f, mood: f.mood === i + 1 ? 0 : i + 1 })}>{m}</button>)}</div></div>
+            <button className="primary" disabled={busy || !f.subject.trim()} onClick={() => run(async () => {
+              const r = await api.post<{ to: string }>("/api/field/me/feedback", { ...f, mood: f.mood || null }); setDone(r.to); setF({ kind: "idea", subject: "", body: "", mood: 0 }); await reload();
+            })}>Send</button>
+            <ErrorLine error={err} />
+          </section>
+          {data.sent.length > 0 && <section className="card"><h2>What I've sent</h2>{data.sent.map((x) => (
+            <div key={x.id} className="update"><div className="row small" style={{ margin: 0 }}><b>{x.kind_label}: {x.subject}</b><span className="spacer" /><Status value={x.status} labels={{ sent: "Sent", read: "Read", actioned: "Done" }} /></div>
+              <small className="muted">to {x.to} · {fmtDate(x.at)}</small>{x.reply && <p className="reply-box"><b>{x.to}:</b> {x.reply}</p>}</div>))}</section>}
+        </>
+      ) : data.received.map((x) => <ReceivedFeedback key={x.id} x={x} onDone={reload} />)}
+    </div>
+  );
+}
+
+function ReceivedFeedback({ x, onDone }: { x: Fb; onDone: () => void }) {
+  const [reply, setReply] = useState("");
+  const [run, err, busy] = useAction();
+  return (
+    <section className={`card ${x.status === "sent" ? "fb-new" : ""}`}>
+      <div className="row wrap" style={{ margin: 0 }}><b>{x.kind_label}: {x.subject}</b>{x.mood && <span>{MOODS[x.mood - 1]}</span>}<span className="spacer" />
+        <Status value={x.status} labels={{ sent: "New", read: "Read", actioned: "Done" }} /></div>
+      <small className="muted">from {x.from} · {fmtDate(x.at)}</small>
+      {x.body && <p className="policy-text">{x.body}</p>}
+      {x.reply && <p className="reply-box"><b>You:</b> {x.reply}</p>}
+      <textarea placeholder="Reply to them" value={reply} onChange={(e) => setReply(e.target.value)} />
+      <div className="row">
+        <button disabled={busy || !reply.trim()} onClick={() => run(async () => { await api.put(`/api/field/me/feedback/${x.id}`, { reply }); setReply(""); onDone(); })}>Reply</button>
+        {x.status !== "actioned" && <button className="primary" disabled={busy} onClick={() => run(async () => { await api.put(`/api/field/me/feedback/${x.id}`, { status: "actioned", ...(reply ? { reply } : {}) }); setReply(""); onDone(); })}>Mark done</button>}
+      </div>
+      <ErrorLine error={err} />
+    </section>
   );
 }

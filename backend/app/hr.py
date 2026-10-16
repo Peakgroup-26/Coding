@@ -11,12 +11,12 @@ import uuid
 from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from . import ops, storage
 from .finance import entry_hours
-from .models import (Announcement, Candidate, ChecklistTask, ChecklistTemplate, Credential, CredentialType, EmployeeProfile,
+from .models import (Announcement, Candidate, ChecklistTask, ChecklistTemplate, Credential, CredentialType, EmployeeFeedback, EmployeeProfile,
                      IssuedItem, JobOpening, LeaveAdjustment, LeavePolicy, PayChange, Policy, PolicySignature,
                      Review, ReviewCycle, Survey, SurveyInvite, SurveyResponse, TimeEntry, TimeOff, User)
 from .plant import notify
@@ -605,13 +605,81 @@ def my_hr(db: Session, user: User) -> dict:
     for inv in db.scalars(select(SurveyInvite).where(SurveyInvite.user_id == user.id, SurveyInvite.answered.is_(False))):
         s = db.get(Survey, inv.survey_id)
         if s and s.status == "open":
-            surveys.append({"id": s.id, "title": s.title, "anonymous": s.anonymous})
-    return {"tasks": [task_out(db, t, names) for t in todo_tasks],
+            surveys.append({"id": s.id, "title": s.title, "anonymous": s.anonymous, "required": s.required})
+    inbox = db.scalar(select(func.count()).select_from(EmployeeFeedback).where(EmployeeFeedback.to_user_id == user.id,
+                                                                            EmployeeFeedback.status == "sent")) or 0
+    return {"tasks": [task_out(db, t, names) for t in todo_tasks], "feedback_waiting": inbox,
             "policies": [{"id": p.id, "title": p.title, "version": p.version} for p in policies_to_sign(db, user)],
             "reviews": reviews, "surveys": surveys,
             "goals": [{"id": g.id, "title": g.title, "progress": g.progress, "due": _iso(g.due), "status": g.status}
                       for g in db.scalars(select(Goal).where(Goal.user_id == user.id, Goal.status == "open"))],
             "announcements": announcements_for(db, user)}
+
+
+# --- surveys that must be answered ---
+def pending_surveys(db: Session, user: User) -> list[Survey]:
+    """Open surveys marked 'must answer' this person hasn't answered: they pop up and stay until done."""
+    today = today_local()
+    out = []
+    for inv in db.scalars(select(SurveyInvite).where(SurveyInvite.user_id == user.id, SurveyInvite.answered.is_(False))):
+        s = db.get(Survey, inv.survey_id)
+        if s and s.status == "open" and s.required and (s.closes is None or s.closes >= today):
+            out.append(s)
+    return out
+
+
+def enps_by_month(db: Session, months: int = 12, today: date | None = None) -> list[dict]:
+    """The team's eNPS month by month, from every survey's 0-10 question."""
+    from .crm import nps_of
+
+    today = today or today_local()
+    keys: list[str] = []
+    y, m = today.year, today.month
+    for _ in range(months):
+        keys.append(f"{y}-{m:02d}")
+        y, m = (y, m - 1) if m > 1 else (y - 1, 12)
+    keys.reverse()
+    enps_q = {s.id: [q["key"] for q in (s.questions or []) if q.get("type") == "enps"] for s in db.scalars(select(Survey))}
+    anon = {s.id: s.anonymous for s in db.scalars(select(Survey))}
+    scores: dict[str, list[int]] = defaultdict(list)
+    dept: dict[str, dict[str, list[int]]] = defaultdict(lambda: defaultdict(list))
+    any_anon: dict[str, bool] = defaultdict(bool)
+    for r in db.scalars(select(SurveyResponse)):
+        for k in enps_q.get(r.survey_id, []):
+            v = (r.answers or {}).get(k)
+            if v in (None, "") or r.month not in keys:
+                continue
+            scores[r.month].append(int(v))
+            dept[r.month][r.department or "other"].append(int(v))
+            any_anon[r.month] |= bool(anon.get(r.survey_id))
+    out = []
+    for k in keys:
+        sc = scores.get(k, [])
+        out.append({"month": k, "enps": nps_of(sc), "responses": len(sc), "promoters": sum(1 for s in sc if s >= 9),
+                    "passives": sum(1 for s in sc if 7 <= s <= 8), "detractors": sum(1 for s in sc if s <= 6),
+                    "departments": {d: nps_of(v) for d, v in dept.get(k, {}).items() if len(v) >= 3 or not any_anon[k]}})
+    return out
+
+
+# --- feedback to your manager ---
+FEEDBACK_KINDS = {"idea": "Idea", "concern": "Concern", "praise": "Shout-out", "safety": "Safety", "workload": "Workload / wellbeing", "other": "Other"}
+
+
+def feedback_to(db: Session, user: User) -> User | None:
+    """Who a person's feedback goes to: their manager, else an admin."""
+    p = profile(db, user.id)
+    if p.manager_id:
+        m = db.get(User, p.manager_id)
+        if m and m.active:
+            return m
+    return db.scalar(select(User).where(User.role == "admin", User.active.is_(True), User.id != user.id).order_by(User.id).limit(1)) or \
+        db.scalar(select(User).where(User.role == "admin", User.active.is_(True)).order_by(User.id).limit(1))
+
+
+def feedback_out(f: EmployeeFeedback, names: dict[int, str]) -> dict:
+    return {"id": f.id, "from_user_id": f.from_user_id, "from": names.get(f.from_user_id, ""), "to_user_id": f.to_user_id, "to": names.get(f.to_user_id, ""),
+            "kind": f.kind, "kind_label": FEEDBACK_KINDS.get(f.kind, f.kind), "subject": f.subject, "body": f.body, "mood": f.mood, "status": f.status,
+            "reply": f.reply, "replied_at": f.replied_at.isoformat() if f.replied_at else None, "at": f.created_at.isoformat()}
 
 
 def _iso(d) -> str | None:
