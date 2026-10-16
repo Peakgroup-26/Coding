@@ -27,9 +27,10 @@ def sms_ready() -> bool:
     return bool(config.CLICKSEND_USERNAME and config.CLICKSEND_API_KEY) or _test_outbox is not None
 
 
-def send_email(to: str, subject: str, text: str, html: str | None = None) -> None:
+def send_email(to: str, subject: str, text: str, html: str | None = None, attachments: list[tuple[str, bytes, str]] | None = None) -> None:
+    """attachments: [(filename, bytes, mime type)]"""
     if _test_outbox is not None:
-        _test_outbox.append({"channel": "email", "to": to, "subject": subject, "body": text})
+        _test_outbox.append({"channel": "email", "to": to, "subject": subject, "body": text, "attachments": [a[0] for a in attachments or []]})
         return
     if not email_ready():
         raise NotConfigured("Email isn't set up yet (SMTP_HOST in .env)")
@@ -38,6 +39,9 @@ def send_email(to: str, subject: str, text: str, html: str | None = None) -> Non
     msg.set_content(text)
     if html:
         msg.add_alternative(html, subtype="html")
+    for name, data, mime in attachments or []:
+        main, _, sub = (mime or "application/octet-stream").partition("/")
+        msg.add_attachment(data, maintype=main, subtype=sub or "octet-stream", filename=name)
     with smtplib.SMTP(config.SMTP_HOST, config.SMTP_PORT, timeout=30) as s:
         s.starttls()
         if config.SMTP_USER:

@@ -28,7 +28,7 @@ from . import features
 from .auth import _bearer, read_token
 from .db import get_db
 from .models import (BudgetLine, CivilBoqLine, CountItem, DailyLog, Document, EstimateLine, EstimateSnapshot, Flag, FormResponse,
-                     GeneratedItem, Invoice,
+                     GeneratedItem, Invoice, JobItp, JobSwms,
                      Job, JobAllowance, JobCost, Level, ProjectItem, PurchaseOrder, Run, ScheduleEntry, Sheet, TenderDocument,
                      TenderRequirement, TimeEntry, TradePackage, User, Variation, Viewport)
 
@@ -51,7 +51,7 @@ JOB_PARAMS = {
     "budget_id": BudgetLine, "sched_id": ScheduleEntry, "time_id": TimeEntry, "po_id": PurchaseOrder, "cost_id": JobCost,
     "var_id": Variation, "inv_id": Invoice, "document_id": Document, "pitem_id": ProjectItem, "log_id": DailyLog,
     "resp_id": FormResponse,
-    "wline_id": EstimateLine, "pkg_id": TradePackage, "snap_id": EstimateSnapshot,
+    "wline_id": EstimateLine, "pkg_id": TradePackage, "snap_id": EstimateSnapshot, "swms_id": JobSwms, "itp_id": JobItp,
 }
 
 # (path prefix, permission, methods it applies to; None = all)

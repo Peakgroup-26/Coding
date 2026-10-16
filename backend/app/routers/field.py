@@ -323,7 +323,7 @@ async def upload(file: UploadFile = File(...), job_id: int | None = Form(None), 
     """Photos and files from the phone. Returns the document id to attach to a check, defect or note."""
     if job_id:
         _job(db, job_id, user)
-    d = await project.store(db, file, job_id=job_id, folder=folder if job_id else "Plant photos", user_id=user.id, title=title,
+    d = await project.store(db, file, job_id=job_id, folder=folder if job_id or folder in ("Safety", "Tools") else "Plant photos", user_id=user.id, title=title,
                             linked_type="field")
     db.commit()
     return project.doc_out(d)

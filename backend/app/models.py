@@ -1266,6 +1266,7 @@ class Plant(Base):
     hire_rate: Mapped[float] = mapped_column(Float, default=0.0)  # internal $/h charged to the job when operated
     checklist_id: Mapped[int | None] = mapped_column(ForeignKey("form_templates.id"), nullable=True)  # its pre-start questions
     photos_required: Mapped[bool] = mapped_column(Boolean, default=True)  # machine + fuel gauge photos at start and end of day
+    geotab_id: Mapped[str] = mapped_column(String(50), default="", server_default="")  # the Geotab device it's tracked by
     notes: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
@@ -1895,4 +1896,192 @@ class EmployeeFeedback(Base):
     status: Mapped[str] = mapped_column(String(20), default="sent")  # sent | read | actioned
     reply: Mapped[str] = mapped_column(Text, default="")
     replied_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+# --- Tools (tools.py): who has which tool, and every hand-over ---
+class Tool(Base):
+    __tablename__ = "tools"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(200))  # "Milwaukee M18 press tool", "Hilti TE 3000 breaker"
+    category: Mapped[str] = mapped_column(String(50), default="")  # Power tool, Press tool, Drain camera, Laser, Gas detector...
+    asset_no: Mapped[str] = mapped_column(String(50), default="", index=True)  # the number on the sticker
+    make: Mapped[str] = mapped_column(String(100), default="")
+    model: Mapped[str] = mapped_column(String(100), default="")
+    serial: Mapped[str] = mapped_column(String(100), default="")
+    value: Mapped[float | None] = mapped_column(Float, nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="available")  # available | with_person | repair | lost | retired
+    holder_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    job_id: Mapped[int | None] = mapped_column(ForeignKey("jobs.id", ondelete="SET NULL"), nullable=True)
+    location: Mapped[str] = mapped_column(String(200), default="Yard")  # where it is when nobody has it
+    test_tag_due: Mapped[date | None] = mapped_column(Date, nullable=True)  # electrical test and tag
+    service_due: Mapped[date | None] = mapped_column(Date, nullable=True)  # calibration / service
+    photo_key: Mapped[str] = mapped_column(String(500), default="")
+    notes: Mapped[str] = mapped_column(Text, default="")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class ToolMove(Base):
+    """A request or hand-over. A hand-over is done when the other person confirms it, so both agree who has it."""
+    __tablename__ = "tool_moves"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    tool_id: Mapped[int] = mapped_column(ForeignKey("tools.id", ondelete="CASCADE"), index=True)
+    kind: Mapped[str] = mapped_column(String(20))  # request | handover | return | assign | repair | lost | found
+    from_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    to_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    location: Mapped[str] = mapped_column(String(200), default="")
+    status: Mapped[str] = mapped_column(String(20), default="done")  # pending | done | declined | cancelled
+    started_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    note: Mapped[str] = mapped_column(Text, default="")
+    lat: Mapped[float | None] = mapped_column(Float, nullable=True)
+    lng: Mapped[float | None] = mapped_column(Float, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    done_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+# --- Safety (safety.py): SWMS, sign-ons, incidents and hazards, toolbox talks, corrective actions, site pre-starts ---
+class SwmsTemplate(Base):
+    __tablename__ = "swms_templates"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    title: Mapped[str] = mapped_column(String(200))
+    activity: Mapped[str] = mapped_column(String(300), default="")
+    high_risk: Mapped[list] = mapped_column(JSON, default=list)  # high risk construction work categories it covers
+    ppe: Mapped[list] = mapped_column(JSON, default=list)
+    steps: Mapped[list] = mapped_column(JSON, default=list)  # [{step, hazards, risk_before, controls, risk_after, who}]
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class JobSwms(Base):
+    """A SWMS on a job: a copy of the template at the time, plus anything site-specific. Everyone signs on to it."""
+    __tablename__ = "job_swms"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id", ondelete="CASCADE"), index=True)
+    template_id: Mapped[int | None] = mapped_column(ForeignKey("swms_templates.id", ondelete="SET NULL"), nullable=True)
+    title: Mapped[str] = mapped_column(String(200))
+    activity: Mapped[str] = mapped_column(String(300), default="")
+    high_risk: Mapped[list] = mapped_column(JSON, default=list)
+    ppe: Mapped[list] = mapped_column(JSON, default=list)
+    steps: Mapped[list] = mapped_column(JSON, default=list)
+    site_notes: Mapped[str] = mapped_column(Text, default="")
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    status: Mapped[str] = mapped_column(String(20), default="active")  # active | archived
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class SwmsSignon(Base):
+    __tablename__ = "swms_signons"
+    __table_args__ = (UniqueConstraint("job_swms_id", "version", "user_id"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    job_swms_id: Mapped[int] = mapped_column(ForeignKey("job_swms.id", ondelete="CASCADE"), index=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    typed_name: Mapped[str] = mapped_column(String(200))
+    signature: Mapped[str] = mapped_column(Text, default="")
+    signed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class SafetyEvent(Base):
+    """An incident, injury, near miss or hazard report."""
+    __tablename__ = "safety_events"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    kind: Mapped[str] = mapped_column(String(20), default="hazard")  # hazard | near_miss | incident | injury | property | environment
+    job_id: Mapped[int | None] = mapped_column(ForeignKey("jobs.id", ondelete="SET NULL"), nullable=True, index=True)
+    location: Mapped[str] = mapped_column(String(300), default="")
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    reported_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    title: Mapped[str] = mapped_column(String(300))
+    description: Mapped[str] = mapped_column(Text, default="")
+    immediate_action: Mapped[str] = mapped_column(Text, default="")
+    severity: Mapped[str] = mapped_column(String(10), default="medium")  # low | medium | high | critical
+    treatment: Mapped[str] = mapped_column(String(20), default="none")  # none | first_aid | medical | lost_time
+    people: Mapped[str] = mapped_column(Text, default="")
+    notifiable: Mapped[bool] = mapped_column(Boolean, default=False)  # WHSQ notifiable incident
+    photos: Mapped[list] = mapped_column(JSON, default=list)  # document ids
+    status: Mapped[str] = mapped_column(String(20), default="open")  # open | investigating | closed
+    root_cause: Mapped[str] = mapped_column(Text, default="")
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    closed_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+
+
+class SafetyAction(Base):
+    """A corrective action from an incident, hazard, inspection or toolbox talk."""
+    __tablename__ = "safety_actions"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    event_id: Mapped[int | None] = mapped_column(ForeignKey("safety_events.id", ondelete="CASCADE"), nullable=True, index=True)
+    job_id: Mapped[int | None] = mapped_column(ForeignKey("jobs.id", ondelete="SET NULL"), nullable=True)
+    description: Mapped[str] = mapped_column(Text)
+    assignee_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    due: Mapped[date | None] = mapped_column(Date, nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="open")  # open | done
+    done_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    done_note: Mapped[str] = mapped_column(Text, default="")
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class ToolboxTalk(Base):
+    __tablename__ = "toolbox_talks"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    job_id: Mapped[int | None] = mapped_column(ForeignKey("jobs.id", ondelete="SET NULL"), nullable=True, index=True)
+    topic: Mapped[str] = mapped_column(String(300))
+    notes: Mapped[str] = mapped_column(Text, default="")
+    day: Mapped[date] = mapped_column(Date)
+    presenter_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    attendees: Mapped[list] = mapped_column(JSON, default=list)  # [{user_id, name, signed_at, signature}]
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class SitePrestart(Base):
+    """The daily site pre-start on a job: today's hazards, permits and conditions, and who was there (they sign)."""
+    __tablename__ = "site_prestarts"
+    __table_args__ = (UniqueConstraint("job_id", "day"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id", ondelete="CASCADE"), index=True)
+    day: Mapped[date] = mapped_column(Date, index=True)
+    led_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    answers: Mapped[dict] = mapped_column(JSON, default=dict)
+    attendees: Mapped[list] = mapped_column(JSON, default=list)  # [{user_id, name, signed_at, signature}]
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+# --- ITPs (itp.py): inspection and test plans on each job ---
+class ItpTemplate(Base):
+    __tablename__ = "itp_templates"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(200))  # Sanitary drainage, Water services, Gas...
+    items: Mapped[list] = mapped_column(JSON, default=list)  # [{key, stage, activity, check, criteria, frequency, point, who, record}]
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class JobItp(Base):
+    __tablename__ = "job_itps"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id", ondelete="CASCADE"), index=True)
+    template_id: Mapped[int | None] = mapped_column(ForeignKey("itp_templates.id", ondelete="SET NULL"), nullable=True)
+    name: Mapped[str] = mapped_column(String(200))
+    area: Mapped[str] = mapped_column(String(200), default="")  # e.g. Level 3, Unit 12, Stage 2
+    items: Mapped[list] = mapped_column(JSON, default=list)
+    status: Mapped[str] = mapped_column(String(20), default="open")  # open | complete
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class ItpCheck(Base):
+    """One item checked: pass / fail / not applicable, with a reading, photos, and a sign-off for hold and witness points."""
+    __tablename__ = "itp_checks"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    job_itp_id: Mapped[int] = mapped_column(ForeignKey("job_itps.id", ondelete="CASCADE"), index=True)
+    item_key: Mapped[str] = mapped_column(String(40))
+    day: Mapped[date] = mapped_column(Date)
+    result: Mapped[str] = mapped_column(String(10))  # pass | fail | na
+    reading: Mapped[str] = mapped_column(String(300), default="")
+    notes: Mapped[str] = mapped_column(Text, default="")
+    photos: Mapped[list] = mapped_column(JSON, default=list)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    signed_name: Mapped[str] = mapped_column(String(200), default="")  # supervisor / client / certifier for hold and witness points
+    signed_role: Mapped[str] = mapped_column(String(50), default="")
+    signature: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

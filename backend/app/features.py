@@ -50,6 +50,12 @@ FEATURES: list[tuple[str, str, str, list[str], list[str]]] = [
     ("plant", "Operations", "Plant and vehicles", ["/plant"], [r"^/api/plant"]),
     ("maintenance", "Operations", "Maintenance planner (assets)", ["/maintenance"], [r"^/api/(assets|maintenance)\b"]),
     ("documents", "Operations", "Company documents and forms", ["/documents"], [r"^/api/(files|form-templates|forms)\b"]),
+    ("tools", "Operations", "Tools register (add tools, assign, test and tag)", ["/tools"], [r"^/api/tools\b"]),
+    ("vehicles_map", "Operations", "Vehicle map (Geotab)", ["/vehicles"], [r"^/api/vehicles\b"]),
+    # Safety
+    ("safety", "Safety", "Safety: dashboard, SWMS, incidents and hazards, actions, toolbox talks, site pre-starts", ["/safety"],
+     [r"^/api/safety\b", r"^/api/jobs/\d+/(swms|prestarts)\b", r"^/api/job-swms\b"]),
+    ("itp", "Safety", "ITPs (inspection and test plans) on jobs", [], [r"^/api/jobs/\d+/itps\b", r"^/api/(job-itps|itp-templates)\b"]),
     # Customers
     ("customers", "Customers", "Customers and sites", ["/customers"], [r"^/api/(customers|sites)\b"]),
     ("crm", "Customers", "Feedback and follow-ups (CRM, NPS)", ["/crm"], [r"^/api/crm\b"]),
@@ -79,6 +85,8 @@ FEATURES: list[tuple[str, str, str, list[str], list[str]]] = [
     ("field_me", "Phone app", "Me: my leave, licences, details, policies, reviews, surveys", ["/field/me"],
      [r"^/api/field/me(?!/(directory|photo|new-password))\b"]),
     ("field_work", "Phone app", "Board tasks on the phone", ["/field/work"], [r"^/api/field/my-work\b"]),
+    ("field_tools", "Phone app", "Tools: who has what, ask for it, hand it over", ["/field/tools"], [r"^/api/field/(tools|tool-moves)\b"]),
+    ("field_safety", "Phone app", "Safety: SWMS sign-on, site pre-starts, ITP checks, hazard reports", ["/field/safety"], [r"^/api/field/safety\b"]),
     # Admin-ish
     ("settings_ops", "Admin", "Operations settings (rates, margins, overtime, HR settings)", [], [r"^/api/ops-settings\b"]),
 ]
@@ -108,10 +116,11 @@ POSITIONS: list[tuple[str, str, dict[str, str]]] = [
     ("Estimator", "Tenders, pricing and sales; sees live jobs", {**_preset("none"), **_group("edit", "Estimating", "Work"),
      "live_jobs": "view", "schedule": "view", "customers": "view", "purchasing": "view", "supplier_prices": "view", "documents": "view",
      **{k: "edit" for k in FIELD_KEYS}, "field_crew": "none"}),
-    ("Project manager", "Runs live jobs; sees estimates and job money", {**_preset("none"), **_group("edit", "Operations", "Customers", "Work"),
+    ("Project manager", "Runs live jobs; sees estimates and job money", {**_preset("none"), **_group("edit", "Operations", "Customers", "Work", "Safety"),
      "tenders": "view", "workbook": "view", "civil": "view", "reports": "edit", "rate_library": "view", "finance": "view",
      "invoices": "view", "supplier_prices": "view", "hr_licences": "view", "hr_leave": "view", **{k: "edit" for k in FIELD_KEYS}}),
     ("Supervisor", "On site: jobs, schedule, timesheets, plant, crew", {**_preset("none"), "my_work": "edit", "boards": "edit", "assistant": "edit",
+     "tools": "edit", "vehicles_map": "view", "safety": "edit", "itp": "edit",
      "live_jobs": "edit", "schedule": "edit", "timesheets": "edit", "purchasing": "edit", "plant": "edit", "maintenance": "edit",
      "documents": "edit", "customers": "view", "hr_licences": "view", **{k: "edit" for k in FIELD_KEYS}}),
     ("Accounts", "Money, invoices, purchasing and timesheets", {**_preset("none"), **_group("edit", "Money"), "my_work": "edit", "boards": "edit",

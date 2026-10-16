@@ -48,12 +48,14 @@ _last_daily: datetime | None = None
 
 def tick(full_xero: bool | None = None) -> None:
     global _last_full_xero, _last_daily
-    from . import boards, crm, hr, plant, xero
+    from . import boards, crm, hr, plant, safety, tools, xero
 
     now = datetime.now(timezone.utc)
     if _last_daily is None or now - _last_daily >= timedelta(hours=1):  # licence reminders and leavers: hourly is plenty
         _last_daily = now
         _run("hr.daily", lambda db: hr.daily(db))
+        _run("tools.daily", lambda db: tools.daily(db))
+        _run("safety.daily", lambda db: safety.daily(db))
     _run("crm.send", crm.send_due)
     _run("crm.monthly", lambda db: crm.monthly(db))
     _run("plant.reminders", lambda db: plant.monthly_reminders(db))

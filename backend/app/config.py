@@ -65,6 +65,11 @@ XERO_CLIENT_SECRET = os.environ.get("XERO_CLIENT_SECRET", "")
 XERO_SCOPES = os.environ.get("XERO_SCOPES", "openid profile email offline_access accounting.contacts accounting.invoices "
                              "accounting.payments accounting.banktransactions.read accounting.settings.read accounting.reports.read")
 XERO_SYNC_MINUTES = int(os.environ.get("XERO_SYNC_MINUTES", "15"))
+# Geotab (vehicle tracking): a MyGeotab user with read access (a "View only" security clearance is enough)
+GEOTAB_SERVER = os.environ.get("GEOTAB_SERVER", "my.geotab.com")
+GEOTAB_DATABASE = os.environ.get("GEOTAB_DATABASE", "")
+GEOTAB_USERNAME = os.environ.get("GEOTAB_USERNAME", "")
+GEOTAB_PASSWORD = os.environ.get("GEOTAB_PASSWORD", "")
 
 # Background jobs (sending messages, reminders, Xero sync). Off in tests; tests call the tick themselves.
 BACKGROUND_TASKS = os.environ.get("BACKGROUND_TASKS", "1") == "1"
