@@ -7,6 +7,9 @@ import { api, ApiError, fetchBlobUrl, upload } from "../api";
 import { sees, useApp } from "../App";
 import { AskPeakButton } from "./AskPeak";
 import { Directory, FeedbackPage, FieldBoardItem, MeTab, MyBoardItems, ReviewForm, SignPolicy, SurveyForm, SurveyGate, WorkItem } from "./FieldMe";
+import { FieldTools } from "./Tools";
+import { PdfShare } from "./Share";
+import { FieldItp, FieldJobSafety, FieldReport, FieldToolbox, SafetyPrompts, SafetyTab } from "./FieldSafety";
 import { addDays, DocOut, ErrorLine, fmtDay, getLocation, shrinkImage, hrs, monday, num, PhotoButton, SignaturePad, todayIso, useAction, useLoad } from "../ui";
 
 interface Entry { id: number; job_id: number | null; job_no: string; job: string; task: string; start_at: string; end_at: string | null; local_day: string;
@@ -85,6 +88,12 @@ export default function FieldApp({ onLogout }: { onLogout?: () => void }) {
           <Route path="prestart/:plantId" element={<PlantCheckFlow />} />
           <Route path="timesheet" element={<TimesheetTab />} />
           <Route path="crew" element={<CrewTab />} />
+          <Route path="tools" element={<FieldTools />} />
+          <Route path="safety" element={<SafetyTab />} />
+          <Route path="safety/jobs/:jobId" element={<FieldJobSafety />} />
+          <Route path="safety/itp/:itpId" element={<FieldItp />} />
+          <Route path="safety/report" element={<FieldReport />} />
+          <Route path="safety/toolbox" element={<FieldToolbox />} />
           <Route path="me" element={<MeTab />} />
           <Route path="me/policy/:id" element={<SignPolicy />} />
           <Route path="me/review/:id" element={<ReviewForm />} />
@@ -99,6 +108,8 @@ export default function FieldApp({ onLogout }: { onLogout?: () => void }) {
         {sees(user, "field_jobs") && <NavLink to="/field/jobs">🧰<span>Jobs</span></NavLink>}
         {sees(user, "field_schedule") && <NavLink to="/field/schedule">📅<span>Schedule</span></NavLink>}
         {sees(user, "field_prestart") && <NavLink to="/field/prestart">🚜<span>Pre-start</span></NavLink>}
+        {sees(user, "field_safety") && <NavLink to="/field/safety">🦺<span>Safety</span></NavLink>}
+        {sees(user, "field_tools") && <NavLink to="/field/tools">🔧<span>Tools</span></NavLink>}
         {sees(user, "field_timesheet") && <NavLink to="/field/timesheet">🧾<span>Timesheet</span></NavLink>}
         {sees(user, "field_me") && <NavLink to="/field/me">🙂<span>Me</span></NavLink>}
       </nav>
@@ -134,6 +145,7 @@ function TodayTab({ onQueued }: { onQueued: () => void }) {
     <div className="stack">
       <div className="hello"><h1>G'day {t.user.name.split(" ")[0]}</h1><span className="muted">{fmtDay(t.day)}</span></div>
       <BoardTasks />
+      {sees(user, "field_safety") && <SafetyPrompts />}
       {t.todo.blocking.map((b) => (
         <Link key={b.kind + b.plant_id} to={`/field/prestart/${b.plant_id}?kind=${b.kind === "wash" ? "wash" : "weekly"}`} className="todo blocking">
           ⚠️ {b.text}<span>Do it now ›</span></Link>
@@ -580,13 +592,14 @@ function CheckForm({ plantId, kind }: { plantId: number; kind: string }) {
   const [reading, setReading] = useState("");
   const [fuel, setFuel] = useState<number | null>(null);
   const [notes, setNotes] = useState("");
-  const [result, setResult] = useState<{ passed: boolean; failed: string[] } | null>(null);
+  const [result, setResult] = useState<{ id?: number; passed: boolean; failed: string[] } | null>(null);
   const [run, error, busy] = useAction();
   if (!spec) return null;
   if (result) return (
     <div className={`card ${result.passed ? "" : "attention"}`}>
       <h2>{result.passed ? "✓ All good" : "✗ Not safe to use"}</h2>
       {!result.passed && <><p>These failed and have been reported to your supervisor:</p><ul>{result.failed.map((f) => <li key={f}>{f}</li>)}</ul></>}
+      {result.id && <PdfShare kind="plant-check" id={result.id} title={`${spec.plant.name ?? "Plant"} ${kind.replace("_", " ")}`} />}
       <button className="primary big-btn" onClick={() => nav("/field")}>Back to Today</button>
     </div>
   );
@@ -594,7 +607,7 @@ function CheckForm({ plantId, kind }: { plantId: number; kind: string }) {
   return (
     <form className="stack" onSubmit={(e) => { e.preventDefault(); run(async () => {
       const loc = await getLocation();
-      const r = await api.post<{ passed: boolean; failed: string[] }>(`/api/field/plant/${plantId}/check`, {
+      const r = await api.post<{ id: number; passed: boolean; failed: string[] }>(`/api/field/plant/${plantId}/check`, {
         kind, answers, photo_ids: photos, notes, fuel_pct: fuel, ...loc,
         ...(reading ? (spec.reading === "km" ? { odometer: Number(reading) } : { hours: Number(reading) }) : {}) });
       setResult(r);

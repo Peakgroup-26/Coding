@@ -308,6 +308,50 @@ The AI never invents amounts or percentages: where the document doesn't state on
 
 Reading the plans again (for example, a new revision) keeps approved lines and typed-in rates. If the new reading differs, it adds a note to the line instead of changing an approved quantity.
 
+## Tools, vehicles and safety
+
+**Tools** (Operations → Tools; phone → Tools tab). Every tool is in the register with its tag no., value, photo and test-and-tag
+date. Everyone can see who has each tool, and tapping the holder's name rings them so you can meet up. Hand-overs are confirmed by
+both people:
+- *I need it*: the holder gets a message with your number.
+- *I've got it now*: from the yard it's yours straight away; from a person, they confirm.
+- *Give to…*: the other person confirms they've got it.
+- *Back to the yard* or *Problem?* (needs repair, missing).
+
+The office can set who has a tool straight away (stocktakes), import a CSV, and see each tool's history. Test and tag due within 14
+days, and hand-overs left unconfirmed for 2 days, send reminders.
+
+**Vehicle map** (Operations → Vehicle map). Live from Geotab: every vehicle on one map, with moving or parked, speed, driver and
+when it last reported. It refreshes every 30 seconds. Vehicles are matched to plant records by rego, VIN or name, or linked by hand.
+See [deploy/GEOTAB.md](deploy/GEOTAB.md) for the setup.
+
+**Safety** (Safety menu):
+- *Dashboard*: days since a lost-time injury, open reports and actions, reports by month, toolbox talks, SWMS sign-ons, and jobs
+  on today without a site pre-start.
+- *Incidents and hazards*: reported from the phone with photos, then investigated with corrective actions, each given to someone
+  with a due date.
+- *SWMS library*: 8 starter SWMS (excavation, heights, confined spaces, hot works, gas, jetting, traffic and plant, AC pipe) with
+  the s291 high-risk work list.
+- *ITP templates*: sanitary drainage, water, gas, stormwater and hot water, with hold, witness and review points.
+- *Toolbox talks, site pre-starts and sign-ons*.
+
+**On each job** (Jobs → a job): **SWMS**, **ITPs** and **Site pre-starts** tabs. Adding a SWMS asks everyone on the job to sign
+it; changing it asks them to sign the new version.
+
+**Every day on the phone**, each job someone is on (scheduled, clocked in or worked on today) shows what's still needed on the
+Today screen and the Safety tab:
+- the job's SWMS to sign
+- the site pre-start (the first person fills it in, everyone signs on)
+- today's ITP checks: the daily ones, then the next items on each ITP
+
+Hold and witness points need the inspector's name and signature. Test items need the reading. A fail tells the office and the
+supervisor.
+
+**PDFs.** ITPs, site pre-starts, plant pre-starts, SWMS, incident reports and toolbox talks all have **PDF**, **Share** and
+**Email** buttons:
+- Share opens the phone's share sheet (Messages, WhatsApp, email, Drive).
+- Email sends the PDF from Lorojo.
+
 ## What Phase 1 does
 
 - **Jobs:** name, client, builder, address, quote number and due date.

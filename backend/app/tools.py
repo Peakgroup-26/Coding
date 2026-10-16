@@ -70,10 +70,18 @@ def request(db: Session, t: Tool, user: User, note: str = "") -> ToolMove:
     return m
 
 
+def _pending_handover(db: Session, t: Tool, to_user_id: int) -> ToolMove | None:
+    return db.scalar(select(ToolMove).where(ToolMove.tool_id == t.id, ToolMove.kind == "handover", ToolMove.to_user_id == to_user_id,
+                                            ToolMove.from_user_id == t.holder_id, ToolMove.status == "pending"))
+
+
 def give(db: Session, t: Tool, actor: User, to: User, note: str = "", lat=None, lng=None) -> ToolMove:
     """The holder hands it to someone: it moves when they confirm they've got it."""
     if to.id == t.holder_id:
         raise ValueError(f"{_name(to)} already has it")
+    m = _pending_handover(db, t, to.id)
+    if m:
+        return m
     m = ToolMove(tool_id=t.id, kind="handover", from_user_id=t.holder_id, to_user_id=to.id, status="pending", started_by=actor.id, note=note,
                  lat=lat, lng=lng)
     db.add(m)
@@ -86,6 +94,9 @@ def take(db: Session, t: Tool, user: User, note: str = "", lat=None, lng=None) -
     """'I've got it now' from the person who picked it up: the holder (if anyone) confirms; from the yard it's straight away."""
     if t.holder_id == user.id:
         raise ValueError("You've already got it")
+    m = _pending_handover(db, t, user.id)
+    if m:
+        return m  # tapped twice: still waiting on the same confirmation
     m = ToolMove(tool_id=t.id, kind="handover", from_user_id=t.holder_id, to_user_id=user.id, status="pending", started_by=user.id, note=note,
                  lat=lat, lng=lng)
     db.add(m)

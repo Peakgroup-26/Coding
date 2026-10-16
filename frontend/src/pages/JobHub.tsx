@@ -2,9 +2,10 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api, fetchBlobUrl, upload } from "../api";
-import { can, useApp } from "../App";
+import { can, sees, useApp } from "../App";
 import { DataTable, DocOut, ErrorLine, Field, fmtDate, fmtDay, hrs, Modal, money, num, pct, Status, Tabs, todayIso, useAction, useLoad } from "../ui";
 import { WORK_LABELS, WorkRow } from "./WorkBoard";
+import { JobItpsTab, JobPrestartsTab, JobSwmsTab } from "./Safety";
 
 interface CatRow { category: string; label: string; budget: number; actual: number; committed: number; forecast: number; to_complete: number; variance: number }
 export interface Fin {
@@ -13,7 +14,7 @@ export interface Fin {
   percent_complete: number; percent_basis: string; earned: number; invoiced: number; received: number; retention_held: number; over_under_billed: number;
   to_invoice: number; hours_budget: number; hours_actual: number; categories: CatRow[]; over_budget: boolean;
 }
-type Tab = "overview" | "budget" | "time" | "materials" | "costs" | "variations" | "invoices" | "docs" | "project" | "diary" | "forms";
+type Tab = "overview" | "budget" | "time" | "materials" | "costs" | "variations" | "invoices" | "docs" | "project" | "diary" | "forms" | "swms" | "itps" | "prestarts";
 
 export default function JobHub() {
   const { jobId } = useParams();
@@ -24,7 +25,9 @@ export default function JobHub() {
   if (!w) return <main className="page">Loading…</main>;
   const f = w.financials;
   const tabs: [Tab, string][] = [["overview", "Overview"], ["budget", "Budget"], ["time", "Time"], ["materials", "Materials"], ["costs", "POs & costs"], ["variations", "Variations"],
-    ["invoices", "Invoices"], ["docs", "Documents"], ["project", "RFIs & defects"], ["diary", "Site diary"], ["forms", "Forms"]];
+    ["invoices", "Invoices"], ["docs", "Documents"], ["project", "RFIs & defects"], ["diary", "Site diary"], ["forms", "Forms"],
+    ...(sees(user, "safety") ? [["swms", "SWMS"], ["prestarts", "Site pre-starts"]] as [Tab, string][] : []),
+    ...(sees(user, "itp") ? [["itps", "ITPs"]] as [Tab, string][] : [])];
   return (
     <main className="page">
       <Link to="/work" className="small">‹ Jobs</Link>
@@ -59,6 +62,9 @@ export default function JobHub() {
       {tab === "project" && <Project jobId={w.id} />}
       {tab === "diary" && <Diary jobId={w.id} />}
       {tab === "forms" && <FormsTab jobId={w.id} />}
+      {tab === "swms" && <JobSwmsTab jobId={w.id} />}
+      {tab === "itps" && <JobItpsTab jobId={w.id} />}
+      {tab === "prestarts" && <JobPrestartsTab jobId={w.id} />}
     </main>
   );
 }

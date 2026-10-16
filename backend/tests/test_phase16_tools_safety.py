@@ -48,6 +48,8 @@ def test_tools_who_has_it_request_and_hand_over(client):
     assert _notes(dave, "0499 888 777")
     # They meet up; Dave hands it over and Sam confirms he's got it
     client.post(f"/api/field/tools/{t['id']}/give", headers=dh, json={"to_user_id": sam})
+    client.post(f"/api/field/tools/{t['id']}/give", headers=dh, json={"to_user_id": sam})  # a double tap doesn't make two
+    assert len([m for m in client.get("/api/field/tools", headers=sh).json()["to_confirm"] if m["kind"] == "handover"]) == 1
     assert next(x for x in client.get("/api/field/tools", headers=sh).json()["tools"] if x["id"] == t["id"])["holder"] == "Dave Tools"  # not yet
     pend = client.get("/api/field/tools", headers=sh).json()["to_confirm"]
     give = next(m for m in pend if m["kind"] == "handover")

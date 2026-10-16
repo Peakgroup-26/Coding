@@ -1185,14 +1185,14 @@ def answer_survey(survey_id: int, body: dict, db: Session = Depends(get_db), use
         v = (body.get("answers") or {}).get(q["key"])
         if v in (None, ""):
             continue
-        if q.get("type") == "enps":
-            v = int(v)
-            if not 0 <= v <= 10:
-                raise HTTPException(422, "0 to 10")
-        elif q.get("type") == "rating":
-            v = int(v)
-            if not 1 <= v <= 5:
-                raise HTTPException(422, "1 to 5")
+        if q.get("type") in ("enps", "rating"):
+            lo, hi = (0, 10) if q["type"] == "enps" else (1, 5)
+            try:
+                v = int(v)
+            except (TypeError, ValueError):
+                v = None
+            if v is None or not lo <= v <= hi:
+                raise HTTPException(422, f"{q.get('label') or 'Score'}: pick {lo} to {hi}")
         else:
             v = str(v)[:2000]
         answers[q["key"]] = v

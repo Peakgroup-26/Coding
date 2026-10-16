@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .. import itp, messaging, pdfs
+from .. import features, itp, messaging, pdfs
 from .. import safety as sf
 from ..access import can_see_job
 from ..audit import record
@@ -469,7 +469,8 @@ class DoneIn(BaseModel):
 @field.post("/safety/actions/{action_id}/done")
 def action_done(action_id: int, body: DoneIn, db: Session = Depends(get_db), user: User = Depends(current_user)):
     a = get_or_404(db, SafetyAction, action_id)
-    if a.assignee_id not in (user.id, None) and user.role != "admin":
+    office = user.role != "field" and features.level(db, user, "safety") == "edit"
+    if a.assignee_id not in (user.id, None) and user.role != "admin" and not office:
         raise HTTPException(404, "Not found")
     a.status, a.done_at, a.done_note = "done", datetime.now(timezone.utc), body.note
     db.commit()

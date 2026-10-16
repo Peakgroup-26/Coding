@@ -36,6 +36,9 @@ import Boards, { BoardPage, MyWork } from "./pages/Boards";
 import { RateLibrary } from "./pages/Workbook";
 import { BoardFormPage, Careers } from "./pages/PublicPages";
 import Director from "./pages/Director";
+import ToolsPage from "./pages/Tools";
+import Vehicles from "./pages/Vehicles";
+import Safety from "./pages/Safety";
 import { SurveyGate } from "./pages/FieldMe";
 
 interface Ctx { user: User; settings: Settings; reloadSettings: () => Promise<void> }
@@ -121,8 +124,12 @@ export default function App() {
       ["/price-books", "Price books", can(user, "can_hydraulic")], ["/rules", "Fitting rules", can(user, "can_hydraulic")],
       ["/mappings", "Price mappings", can(user, "can_hydraulic")], ["/jobs", "Jobs set up by hand", true]] },
     { label: "Operations", links: [["/work", "Jobs", ops], ["/schedule", "Schedule", ops], ["/timesheets", "Timesheets", ops],
-      ["/purchasing", "Purchasing", ops], ["/plant", "Plant & vehicles", ops], ["/maintenance", "Maintenance planner", ops],
+      ["/purchasing", "Purchasing", ops], ["/plant", "Plant & vehicles", ops], ["/vehicles", "Vehicle map (Geotab)", true],
+      ["/tools", "Tools", true], ["/field/tools", "Who has which tool", true], ["/maintenance", "Maintenance planner", ops],
       ["/documents", "Company documents", ops], ["/field", "Phone app", true]] },
+    { label: "Safety", links: [["/safety", "Safety dashboard", true], ["/safety?tab=events", "Incidents & hazards", true], ["/safety?tab=actions", "Actions", true],
+      ["/safety?tab=swms", "SWMS library", true], ["/safety?tab=itp", "ITP templates", true], ["/safety?tab=prestarts", "Site pre-starts", true],
+      ["/field/safety/report", "Report a hazard", true]] },
     { label: "People", links: [["/people", "Team", hr], ["/people?tab=leave", "Leave", hr], ["/people?tab=licences", "Licences & training", hr],
       ["/people?tab=hiring", "Hiring", hr], ["/people?tab=reviews", "Reviews", hr], ["/people?tab=reports", "HR reports", hr],
       ["/field/me", "Me (my leave, licences, policies)", true], ["/field/me/people", "Team directory", true]] },
@@ -137,7 +144,9 @@ export default function App() {
     "/schedule": "schedule", "/timesheets": "timesheets", "/purchasing": "purchasing", "/plant": "plant", "/maintenance": "maintenance",
     "/documents": "documents", "/customers": "customers", "/crm": "crm", "/finance": "finance", "/finance?tab=wip": "finance",
     "/finance?tab=cash": "finance", "/finance?tab=budget": "finance", "/finance?tab=invoices": "invoices", "/purchasing?tab=prices": "supplier_prices",
-    "/reports": "reports", "/people": "hr_records", "/people?tab=leave": "hr_leave", "/people?tab=licences": "hr_licences",
+    "/reports": "reports", "/tools": "tools", "/field/tools": "field_tools", "/vehicles": "vehicles_map", "/safety": "safety",
+    "/safety?tab=events": "safety", "/safety?tab=actions": "safety", "/safety?tab=swms": "safety", "/safety?tab=itp": "itp", "/safety?tab=prestarts": "safety",
+    "/field/safety/report": "field_safety", "/people": "hr_records", "/people?tab=leave": "hr_leave", "/people?tab=licences": "hr_licences",
     "/people?tab=hiring": "hr_hiring", "/people?tab=reviews": "hr_reviews", "/people?tab=reports": "hr_records", "/field/me": "field_me",
   };
   for (const g of groups) g.links = g.links.map(([to, label, ok]) => [to, label, ok && (!FEATURE_OF[to] || sees(user, FEATURE_OF[to]))]);
@@ -187,6 +196,9 @@ export default function App() {
           <Route path="/purchasing" element={G("purchasing", <Purchasing />)} />
           <Route path="/plant" element={G("plant", <PlantPage />)} />
           <Route path="/plant/:plantId" element={G("plant", <PlantPage />)} />
+          <Route path="/tools" element={G("tools", <ToolsPage />)} />
+          <Route path="/vehicles" element={G("vehicles_map", <Vehicles />)} />
+          <Route path="/safety" element={G("safety", <Safety />)} />
           <Route path="/maintenance" element={G("maintenance", <Maintenance />)} />
           <Route path="/documents" element={G("documents", <CompanyDocs />)} />
           <Route path="/customers" element={G("customers", <Customers />)} />

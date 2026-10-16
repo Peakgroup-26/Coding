@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, fetchBlobUrl } from "../api";
+import { PdfShare } from "./Share";
 import { DataTable, ErrorLine, Field, fmtDate, Modal, money, num, Status, useAction, useLoad } from "../ui";
 
 interface PlantRow { id: number; kind: string; name: string; fleet_no: string; category: string; rego: string; make: string; model: string; year: number | null; serial: string;
@@ -89,6 +90,7 @@ function PlantDetail({ id, edit, onEdit, onSaved }: { id: number; edit: Partial<
             { key: "b", label: "By", render: (c) => c.by },
             { key: "r", label: "Reading", hideSm: true, render: (c) => [c.hours && `${num(c.hours)} h`, c.odometer && `${num(c.odometer, 0)} km`, c.fuel_pct !== null && `fuel ${c.fuel_pct}%`].filter(Boolean).join(" · ") },
             { key: "p", label: "Photos", render: (c) => Object.entries(c.photo_ids).map(([k, v]) => <button key={k} className="link small" onClick={() => show(v)}>📷 {k}</button>) },
+            { key: "pdf", label: "", render: (c) => <PdfShare kind="plant-check" id={c.id} title={`${p.name} ${c.kind.replace("_", " ")} ${fmtDate(c.at)}`} small /> },
           ]} />
         </section>
       </div>

@@ -305,3 +305,21 @@ the team directory) stay open. View only means reads are allowed and every chang
 
 116. **The program is called Lorojo** (the logo, page titles, the phone app name and the assistant, "Ask Lorojo").
 
+117. **Tool hand-overs need both people.** The register is only right if the person giving and the person getting agree, so a
+hand-over waits for the other one to confirm. The exception is taking a tool from the yard, which is immediate. The office can
+override anything, and a stocktake sets holders directly.
+
+118. **Geotab is read-only and polled.** Lorojo signs in to MyGeotab with its own read-only user, reads devices, positions and
+drivers, and keeps the result for 30 seconds so many people looking at the map make one call. Credentials live only in the
+server's `.env`.
+
+119. **Site pre-starts are one per job per day.** The first person fills it in, and everyone else on the job reads it and signs
+on. Daily ITP items reset each day; other items stay done once passed. Hold and witness points can't pass without the inspector's
+name and signature.
+
+120. **A SWMS on a job is a copy of the template.** Site-specific changes don't touch the library. Any content change bumps the
+version, and everyone must sign again.
+
+121. **PDFs are built on the server** (PyMuPDF), so they look the same from every phone. Sharing uses the phone's own share
+sheet where it can, so they go out through whatever app people already use.
+

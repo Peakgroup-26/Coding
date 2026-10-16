@@ -834,3 +834,81 @@ table.access-grid { border-collapse: collapse; font-size: 12px; }
 .legend i { width: 18px; height: 4px; border-radius: 2px; display: inline-block; }
 .pd-bar { display: flex; height: 12px; border-radius: 6px; overflow: hidden; background: #f1ede9; }
 .pd-bar i { display: block; } .pd-bar i.p { background: var(--ok); } .pd-bar i.m { background: #e0c27a; } .pd-bar i.d { background: var(--bad); }
+
+/* --- Tools --- */
+.call-link { font-weight: 600; white-space: nowrap; }
+.tool-card { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+.tool-card.mine { border-color: var(--peach); background: var(--peach-soft); }
+.tool-card .btn.call { font-size: 20px; padding: 8px 12px; border-radius: 50%; background: var(--orange); color: #fff; border: 0; text-decoration: none; }
+.tool-actions { gap: 6px; }
+.tool-confirm { display: flex; flex-wrap: wrap; gap: 6px; }
+.tool-photo { max-width: 100%; max-height: 220px; border-radius: 10px; object-fit: cover; }
+.history { max-height: 260px; overflow: auto; display: flex; flex-direction: column; gap: 4px; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: #fff; }
+.seg button { border: 0; border-radius: 0; background: transparent; padding: 8px 14px; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button.on { background: var(--black); color: #fff; font-weight: 600; }
+.seg button.on.ok-on { background: var(--ok); }
+.seg button.on.bad-on { background: var(--bad); }
+.dt tr.bad-row td { background: #fff4f2; }
+.block { display: block; }
+.grow { flex: 1; min-width: 0; }
+.pdf-share { display: inline-flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.pdf-share button.small { padding: 3px 8px; font-size: 12px; }
+
+/* --- Vehicles --- */
+.veh-layout { display: grid; grid-template-columns: 1fr 320px; gap: 12px; height: calc(100vh - 170px); min-height: 420px; }
+.veh-map { border-radius: 12px; border: 1px solid var(--line); min-height: 380px; z-index: 0; }
+.veh-list { display: flex; flex-direction: column; gap: 6px; overflow: auto; }
+.veh-row { display: flex; gap: 10px; text-align: left; background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; align-items: flex-start; white-space: normal; }
+.veh-row.on { border-color: var(--orange); box-shadow: 0 0 0 2px var(--peach-soft); }
+.veh-state { width: 12px; height: 12px; border-radius: 50%; margin-top: 4px; flex: none; background: #9a948f; }
+.veh-state.moving { background: var(--ok); }
+.veh-state.parked { background: var(--orange); }
+.veh-pin { position: absolute; transform: translate(-50%, -50%); display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+.veh-pin .dot { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-size: 16px; background: #fff; border: 3px solid #9a948f; box-shadow: 0 1px 4px rgba(0,0,0,.3); }
+.veh-pin.moving .dot { border-color: var(--ok); }
+.veh-pin.parked .dot { border-color: var(--orange); }
+.veh-pin .lbl { background: var(--black); color: #fff; font: 600 11px Poppins, sans-serif; padding: 2px 6px; border-radius: 6px; }
+@media (max-width: 800px) {
+  .veh-layout { grid-template-columns: 1fr; height: auto; }
+  .veh-map { height: 60vh; }
+}
+
+/* --- Safety --- */
+.big-tile b { font-size: 40px; color: var(--ok); }
+button.tile { text-align: left; cursor: pointer; font: inherit; color: inherit; white-space: normal; }
+button.tile:hover { border-color: var(--orange); }
+.tile.bad { border-color: #f0a5a5; background: #fff6f6; }
+.safety-bars { display: flex; align-items: flex-end; gap: 6px; height: 160px; padding-top: 8px; }
+.safety-bars .col { flex: 1; display: flex; flex-direction: column; align-items: center; height: 100%; gap: 4px; }
+.safety-bars .stack-bar { flex: 1; width: 100%; max-width: 34px; display: flex; flex-direction: column-reverse; background: #f3efeb; border-radius: 4px; overflow: hidden; }
+.safety-bars small { color: var(--muted); font-size: 11px; }
+.sev { text-transform: capitalize; font-weight: 600; }
+.sev-high, .sev-critical { color: var(--bad); }
+.sev-medium { color: var(--warn); }
+.kv-list { display: grid; grid-template-columns: 130px 1fr; gap: 6px 10px; margin: 0; }
+.kv-list dt { color: var(--muted); }
+.kv-list dd { margin: 0; }
+.swms-steps textarea, .swms-steps input, .swms-steps select { width: 100%; min-width: 90px; font-size: 13px; }
+.itp-card { display: flex; flex-direction: column; gap: 6px; }
+.progress { height: 8px; border-radius: 6px; background: #eee7e1; overflow: hidden; }
+.progress > span { display: block; height: 100%; background: var(--orange); }
+.itp-item { background: #fff; border: 1px solid var(--line); border-radius: 10px; margin-bottom: 6px; }
+.itp-item.done { border-color: #a9dcb9; }
+.itp-item.failed { border-color: #f0a5a5; background: #fff6f6; }
+.itp-head { display: flex; gap: 10px; width: 100%; text-align: left; background: transparent; border: 0; padding: 10px; white-space: normal; align-items: flex-start; }
+.itp-head .tick { font-size: 18px; }
+.itp-form { padding: 0 10px 12px; }
+.swms-read { max-height: none; }
+.swms-step { border-left: 3px solid var(--peach); padding: 4px 0 4px 10px; display: flex; flex-direction: column; gap: 2px; }
+.risk { display: inline-block; font-size: 11px; font-weight: 700; padding: 0 6px; border-radius: 8px; background: #eee; }
+.risk.r-High, .risk.r-Extreme { background: #fde5e5; color: var(--bad); }
+.risk.r-Medium { background: #fff1d9; color: var(--warn); }
+.risk.r-Low { background: #e3f4e8; color: var(--ok); }
+.q-label { font-weight: 600; margin-bottom: 4px; }
+.btn.danger-soft, a.danger-soft { background: #fff1ea; border: 1px solid var(--peach); color: #a83a06; font-weight: 600; text-align: center; }
+.field-tabs { overflow-x: auto; grid-auto-columns: minmax(58px, 1fr); }
+.grid-buttons .btn { padding: 14px 8px; text-decoration: none; }
+a.todo, a.todo:hover { text-decoration: none; }
+.card-title { font-size: 15px; } .row:has(> .card-title) { flex-wrap: wrap; }
