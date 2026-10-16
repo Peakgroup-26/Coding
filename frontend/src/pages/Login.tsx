@@ -31,8 +31,9 @@ export default function Login({ onLogin }: { onLogin: (u: User) => void }) {
 
   return (
     <div className="login">
+      <div className="login-brand"><img src="/brand/lorojo-full.png" alt="lorojo – all of it. one place." /></div>
       <form onSubmit={submit} className="card">
-        <h1>Peak Take-off</h1>
+        <h1>Sign in</h1>
         <label>Email<input value={email} onChange={(e) => setEmail(e.target.value)} autoFocus /></label>
         <label>Password<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} /></label>
         {error && <p className="error">{error}</p>}

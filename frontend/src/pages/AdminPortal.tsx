@@ -20,6 +20,7 @@ const PERMS: { key: keyof Permissions; label: string; help: string }[] = [
   { key: "can_pricing", label: "Edit pricing", help: "Change price books, mappings and fitting rules" },
   { key: "can_ops", label: "Operations", help: "Live jobs, scheduling, timesheets, purchasing, plant, customers and CRM" },
   { key: "can_finance", label: "Finance", help: "WIP, budgets, cash flow, invoices, supplier prices and Xero" },
+  { key: "can_hr", label: "People (HR)", help: "Staff records, pay history, leave balances, licences, reviews, surveys and hiring" },
 ];
 const TRADES = ["", "plumber", "apprentice", "labourer", "supervisor", "project manager", "office", "manager"];
 
@@ -27,7 +28,7 @@ function People() {
   const { user: me } = useApp();
   const [users, setUsers] = useState<User[]>([]);
   const blank = { email: "", name: "", role: "estimator", password: "", trade: "", cost_rate: 0, can_hydraulic: true, can_civil: true,
-    can_all_jobs: true, can_past_rates: true, can_pricing: true, can_ops: true, can_finance: false };
+    can_all_jobs: true, can_past_rates: true, can_pricing: true, can_ops: true, can_finance: false, can_hr: false };
   const [form, setForm] = useState(blank);
   const [error, setError] = useState("");
   const load = () => api.get<User[]>("/api/users").then(setUsers);

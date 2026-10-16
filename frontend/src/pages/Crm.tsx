@@ -22,7 +22,7 @@ function NpsBar({ b }: { b: Block }) {
   return (
     <div className="nps-bar" title={`${b.promoters} promoters, ${b.passives} passives, ${b.detractors} detractors`}>
       <span style={{ width: `${(100 * b.detractors) / t}%`, background: SERIES[1] }} />
-      <span style={{ width: `${(100 * b.passives) / t}%`, background: "#c9d1dc" }} />
+      <span style={{ width: `${(100 * b.passives) / t}%`, background: "#d9d2cc" }} />
       <span style={{ width: `${(100 * b.promoters) / t}%`, background: SERIES[2] }} />
     </div>
   );
@@ -36,10 +36,10 @@ function Trend({ months }: { months: Nps["by_month"] }) {
   const y = (v: number) => T + ((100 - v) / 200) * (H - T - B);
   return (
     <svg className="chart" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="NPS by month">
-      {[-100, 0, 100].map((v) => <g key={v}><line x1={L} x2={W - 10} y1={y(v)} y2={y(v)} stroke="#e3e7ee" /><text x={L - 6} y={y(v) + 4} fontSize="11" textAnchor="end" fill="#6b7686">{v}</text></g>)}
+      {[-100, 0, 100].map((v) => <g key={v}><line x1={L} x2={W - 10} y1={y(v)} y2={y(v)} stroke="#e7e2dd" /><text x={L - 6} y={y(v) + 4} fontSize="11" textAnchor="end" fill="#6f6a66">{v}</text></g>)}
       <polyline fill="none" stroke={SERIES[0]} strokeWidth="2" points={months.map((m, i) => (m.nps === null ? null : `${x(i)},${y(m.nps)}`)).filter(Boolean).join(" ")} />
       {months.map((m, i) => m.nps !== null && <circle key={m.month} cx={x(i)} cy={y(m.nps)} r="3" fill={SERIES[0]}><title>{`${m.month}: ${m.nps}`}</title></circle>)}
-      {months.map((m, i) => <text key={m.month} x={x(i)} y={H - 8} fontSize="11" textAnchor="middle" fill="#1c2430">{new Date(m.month + "-01T00:00:00").toLocaleDateString("en-AU", { month: "short" })}</text>)}
+      {months.map((m, i) => <text key={m.month} x={x(i)} y={H - 8} fontSize="11" textAnchor="middle" fill="#161616">{new Date(m.month + "-01T00:00:00").toLocaleDateString("en-AU", { month: "short" })}</text>)}
     </svg>
   );
 }

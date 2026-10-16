@@ -6,6 +6,7 @@ import { Link, NavLink, Route, Routes, useNavigate, useParams } from "react-rout
 import { api, ApiError, fetchBlobUrl, upload } from "../api";
 import { useApp } from "../App";
 import { AskPeakButton } from "./AskPeak";
+import { Directory, FieldBoardItem, MeTab, MyBoardItems, ReviewForm, SignPolicy, SurveyForm, WorkItem } from "./FieldMe";
 import { addDays, DocOut, ErrorLine, fmtDay, getLocation, shrinkImage, hrs, monday, num, PhotoButton, SignaturePad, todayIso, useAction, useLoad } from "../ui";
 
 interface Entry { id: number; job_id: number | null; job_no: string; job: string; task: string; start_at: string; end_at: string | null; local_day: string;
@@ -68,7 +69,7 @@ export default function FieldApp({ onLogout }: { onLogout?: () => void }) {
   return (
     <div className="field-app">
       <header className="field-top">
-        <b>Peak</b><span className="spacer" /><AskPeakButton />
+        <Link to="/field" className="brand" aria-label="lorojo"><img src="/brand/lorojo-logo.png" alt="lorojo" /></Link><span className="spacer" /><AskPeakButton />
         {user.role !== "field" && <Link to="/" className="small">Back to the office app</Link>}
         {onLogout && <button className="link small" onClick={onLogout}>Sign out</button>}
       </header>
@@ -83,6 +84,12 @@ export default function FieldApp({ onLogout }: { onLogout?: () => void }) {
           <Route path="prestart/:plantId" element={<PlantCheckFlow />} />
           <Route path="timesheet" element={<TimesheetTab />} />
           <Route path="crew" element={<CrewTab />} />
+          <Route path="me" element={<MeTab />} />
+          <Route path="me/policy/:id" element={<SignPolicy />} />
+          <Route path="me/review/:id" element={<ReviewForm />} />
+          <Route path="me/survey/:id" element={<SurveyForm />} />
+          <Route path="me/people" element={<Directory />} />
+          <Route path="work/:itemId" element={<FieldBoardItem />} />
         </Routes>
       </main>
       <nav className="field-tabs">
@@ -91,6 +98,7 @@ export default function FieldApp({ onLogout }: { onLogout?: () => void }) {
         <NavLink to="/field/schedule">📅<span>Schedule</span></NavLink>
         <NavLink to="/field/prestart">🚜<span>Pre-start</span></NavLink>
         <NavLink to="/field/timesheet">🧾<span>Timesheet</span></NavLink>
+        <NavLink to="/field/me">🙂<span>Me</span></NavLink>
       </nav>
     </div>
   );
@@ -122,6 +130,7 @@ function TodayTab({ onQueued }: { onQueued: () => void }) {
   return (
     <div className="stack">
       <div className="hello"><h1>G'day {t.user.name.split(" ")[0]}</h1><span className="muted">{fmtDay(t.day)}</span></div>
+      <BoardTasks />
       {t.todo.blocking.map((b) => (
         <Link key={b.kind + b.plant_id} to={`/field/prestart/${b.plant_id}?kind=${b.kind === "wash" ? "wash" : "weekly"}`} className="todo blocking">
           ⚠️ {b.text}<span>Do it now ›</span></Link>
@@ -792,5 +801,17 @@ function JobPhotos({ jobId, photos, onAdded }: { jobId: number; photos: DocOut[]
       )}
       {open && <div className="photo-view" onClick={() => setOpen("")}><img src={open} alt="" /><span>Tap to close</span></div>}
     </section>
+  );
+}
+
+function BoardTasks() {
+  const { data } = useLoad<{ items: WorkItem[]; policies: unknown[]; reviews: unknown[]; surveys: unknown[]; tasks: unknown[] }>("/api/field/my-work");
+  if (!data) return null;
+  const hr = data.policies.length + data.reviews.length + data.surveys.length + data.tasks.length;
+  return (
+    <>
+      {hr > 0 && <Link to="/field/me" className="todo">📝 {hr} thing{hr > 1 ? "s" : ""} for you to sign or fill in<span>›</span></Link>}
+      <MyBoardItems items={data.items} />
+    </>
   );
 }

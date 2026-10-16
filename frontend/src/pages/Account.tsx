@@ -7,6 +7,7 @@ const LABELS: Record<keyof Permissions, string> = {
   can_hydraulic: "Plumbing jobs", can_civil: "Civil jobs", can_all_jobs: "Everyone's jobs and previous tenders",
   can_past_rates: "Previous civil job rates", can_pricing: "Change price books, mappings and rules",
   can_ops: "Live jobs, scheduling, purchasing, customers", can_finance: "Finance: WIP, budgets, cash flow, invoices",
+  can_hr: "People: staff records, pay, leave, reviews and hiring",
 };
 
 export default function Account() {

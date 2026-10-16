@@ -1,7 +1,7 @@
 /* Shared bits for the operations pages: loading data, tabs, modals, money and dates, the microphone,
    photo capture and signatures. */
 import { ReactNode, useCallback, useEffect, useRef, useState } from "react";
-import { api, upload } from "./api";
+import { api, fetchBlobUrl, upload } from "./api";
 
 export function useLoad<T>(url: string | null, deps: unknown[] = []): { data: T | null; error: string; reload: () => Promise<void>; set: (t: T) => void } {
   const [data, setData] = useState<T | null>(null);
@@ -180,7 +180,7 @@ export function SignaturePad({ onChange }: { onChange: (dataUrl: string) => void
   const move = (e: React.PointerEvent) => {
     if (!drawing.current) return;
     const [x, y] = pos(e); const g = c.current!.getContext("2d")!;
-    g.lineWidth = 3; g.lineCap = "round"; g.strokeStyle = "#1c2430"; g.lineTo(x, y); g.stroke();
+    g.lineWidth = 3; g.lineCap = "round"; g.strokeStyle = "#161616"; g.lineTo(x, y); g.stroke();
   };
   const up = () => { if (drawing.current) { drawing.current = false; onChange(c.current!.toDataURL("image/png")); } };
   const clear = () => { const g = c.current!.getContext("2d")!; g.clearRect(0, 0, 600, 200); onChange(""); };
@@ -224,4 +224,17 @@ export function DataTable<R>({ rows, cols, empty = "Nothing here yet.", onRow, r
       </table>
     </div>
   );
+}
+
+/** A person's photo (fetched with the sign-in token), or their initials. */
+export function Avatar({ userId, name, has, small }: { userId: number; name: string; has: boolean; small?: boolean }) {
+  const [src, setSrc] = useState("");
+  useEffect(() => {
+    if (!has) return;
+    let gone = false;
+    fetchBlobUrl(`/api/field/me/photo/${userId}`).then((u) => { if (!gone) setSrc(u); }).catch(() => undefined);
+    return () => { gone = true; };
+  }, [userId, has]);
+  const initials = name.split(/\s+/).map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase();
+  return <span className={`avatar ${small ? "sm" : ""}`}>{src ? <img src={src} alt="" /> : initials}</span>;
 }

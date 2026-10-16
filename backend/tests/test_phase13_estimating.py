@@ -58,6 +58,9 @@ def test_workbook_rows_price_into_the_estimate(client, wb):
     sewer = secs["Sanitary drainage"]["lines"][0]
     assert sewer["qty"] == 15 and sewer["plant_cost"] == 180 and sewer["material_cost"] == 196.88 and sewer["labour_cost"] == 356.25
     assert w["totals"]["cost"] == pytest.approx(7600 + 733.13 + 1800)
+    assert [s_["name"] for s_ in w["sections"]] == ["Preliminaries", "Sanitary drainage"]  # in the order they were started
+    shed = next(l for l in secs["Preliminaries"]["lines"] if l["description"] == "Site shed and toilet hire")
+    assert shed["labour_hours"] == 0
     # It's all in the estimate, with no price book, by stage and as plant / subcontract
     p = client.get(f"/api/jobs/{jid}/pricing").json()
     s = p["summary"]

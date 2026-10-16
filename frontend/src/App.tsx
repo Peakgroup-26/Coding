@@ -31,6 +31,10 @@ import CompanyDocs from "./pages/CompanyDocs";
 import Customers, { CustomerPage } from "./pages/Customers";
 import Crm from "./pages/Crm";
 import Finance from "./pages/Finance";
+import People, { PersonPage } from "./pages/People";
+import Boards, { BoardPage, MyWork } from "./pages/Boards";
+import { RateLibrary } from "./pages/Workbook";
+import { BoardFormPage, Careers } from "./pages/PublicPages";
 
 interface Ctx { user: User; settings: Settings; reloadSettings: () => Promise<void> }
 const AppCtx = createContext<Ctx | null>(null);
@@ -70,6 +74,9 @@ export default function App() {
   if (window.location.pathname.startsWith("/feedback/")) {
     return <Routes><Route path="/feedback/:token" element={<FeedbackForm />} /></Routes>;
   }
+  if (/^\/(careers|forms)(\/|$)/.test(window.location.pathname)) {  // public: no sign-in
+    return <Routes><Route path="/careers" element={<Careers />} /><Route path="/careers/:id" element={<Careers />} /><Route path="/forms/:token" element={<BoardFormPage />} /></Routes>;
+  }
   if (!user || !settings) {
     return (
       <Routes>
@@ -89,14 +96,19 @@ export default function App() {
   }
   const ops = can(user, "can_ops");
   const fin = can(user, "can_finance");
+  const hr = can(user, "can_hr");
   const groups: { label: string; links: [string, string, boolean][] }[] = [
-    { label: "Estimating", links: [["/", "Tenders & quotes", true], ["/sales", "Sales", true],
+    { label: "Work", links: [["/my-work", "My work", true], ["/boards", "Boards", true]] },
+    { label: "Estimating", links: [["/", "Tenders & quotes", true], ["/sales", "Sales", true], ["/rate-library", "Rate library", true],
       ["/civil-rates", "Civil rates", can(user, "can_past_rates") && can(user, "can_civil")],
       ["/price-books", "Price books", can(user, "can_hydraulic")], ["/rules", "Fitting rules", can(user, "can_hydraulic")],
       ["/mappings", "Price mappings", can(user, "can_hydraulic")], ["/jobs", "Jobs set up by hand", true]] },
     { label: "Operations", links: [["/work", "Jobs", ops], ["/schedule", "Schedule", ops], ["/timesheets", "Timesheets", ops],
       ["/purchasing", "Purchasing", ops], ["/plant", "Plant & vehicles", ops], ["/maintenance", "Maintenance planner", ops],
       ["/documents", "Company documents", ops], ["/field", "Phone app", true]] },
+    { label: "People", links: [["/people", "Team", hr], ["/people?tab=leave", "Leave", hr], ["/people?tab=licences", "Licences & training", hr],
+      ["/people?tab=hiring", "Hiring", hr], ["/people?tab=reviews", "Reviews", hr], ["/people?tab=reports", "HR reports", hr],
+      ["/field/me", "Me (my leave, licences, policies)", true], ["/field/me/people", "Team directory", true]] },
     { label: "Customers", links: [["/customers", "Customers", ops], ["/crm", "Feedback & follow-ups", ops]] },
     { label: "Money", links: [["/finance", "Dashboard", fin], ["/finance?tab=wip", "WIP", fin], ["/finance?tab=cash", "Cash flow", fin],
       ["/finance?tab=budget", "Budgets", fin], ["/finance?tab=invoices", "Invoices & debtors", fin],
@@ -107,7 +119,7 @@ export default function App() {
       <div className="app">
         <header className="topbar">
           <button className="burger" aria-label="Menu" onClick={() => setMenu(!menu)}>☰</button>
-          <Link to="/" className="brand">Peak</Link>
+          <Link to="/" className="brand" aria-label="lorojo home"><img src="/brand/lorojo-logo.png" alt="lorojo" /></Link>
           <nav className={menu ? "open" : ""} onClick={(e) => { if ((e.target as HTMLElement).tagName === "A") { setMenu(false); closeMenus(); } }}>
             {groups.map((g) => g.links.some((l) => l[2]) && (
               <details key={g.label} className="more">
@@ -152,6 +164,12 @@ export default function App() {
           <Route path="/customers/:customerId" element={<CustomerPage />} />
           <Route path="/crm" element={<Crm />} />
           <Route path="/finance" element={<Finance />} />
+          <Route path="/people" element={hr ? <People /> : <Navigate to="/field/me" />} />
+          <Route path="/people/:userId" element={hr ? <PersonPage /> : <Navigate to="/field/me" />} />
+          <Route path="/boards" element={<Boards />} />
+          <Route path="/boards/:boardId" element={<BoardPage />} />
+          <Route path="/my-work" element={<MyWork />} />
+          <Route path="/rate-library" element={<RateLibrary />} />
           <Route path="/field/*" element={<FieldApp />} />
           <Route path="/admin" element={user.role === "admin" ? <AdminPortal /> : <Navigate to="/" />} />
           <Route path="/account" element={<Account />} />

@@ -271,3 +271,30 @@ uses its OAuth2 with the granular scopes required for apps made after March 2026
 107. **Ask Peak only reads.** It answers from the same functions the pages use, and its tools respect the person's permissions
 (money tools need Finance). Changes are made on the pages, where they're recorded under the person's name.
 
+108. **The app is branded lorojo** from the supplied logo: black header, orange (#ff6a13) for actions, peach (#ffb27a) as the
+second colour, white cards on a warm light grey so tables stay readable in the sun. The logo files are cut from the PDF.
+Emails to customers still come from the company name in settings.
+
+109. **People records need their own permission (can_hr),** and HR files are stored apart from company documents, so a person
+with Operations access can't open a contract or a warning. Tax file numbers and bank details are not kept: Xero Payroll has them.
+
+110. **Leave balances are worked out, not typed:** opening balance + built up − taken, like the NES. Annual and personal leave
+build up per ordinary hour (approved timesheets and paid leave, capped at the normal week); long service builds up with service
+and is shown but not usable before 7 years (Queensland). Casuals don't build up annual or personal leave. Xero Payroll stays the
+pay run; this is the view the office and the boys use day to day.
+
+111. **Anonymous surveys keep who answered apart from the answers.** Answers store only the month and department, and results
+aren't broken down for groups smaller than three.
+
+112. **Board automations run straight after the change that triggers them,** up to three deep (so one can set off another but a
+loop can't run away); dated and recurring ones are checked once a minute and fire once per item and day. A failing automation
+records its error and never stops the change being saved.
+
+113. **Workbook rows price into the same estimate as the take-off,** with the job's margins, so the quote, the budget, WIP, the
+Simpro export and Ask lorojo all see them. Quantities can follow the take-off live; awarded subcontract quotes become a row
+that follows the quote. Without a price book the estimate is priced from the workbook alone.
+
+114. **The tender cash flow** spreads each stage's sell and cost over the activities it belongs to (S-curve by default), claims
+monthly, holds retention up to the cap, gets paid after the payment terms and pays suppliers after theirs (labour the same
+month), and returns retention half at practical completion and half after 12 months.
+

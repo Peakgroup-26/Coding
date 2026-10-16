@@ -72,7 +72,7 @@ AREAS = [
     ("/api/suppliers", "can_ops", {"POST", "PUT", "PATCH", "DELETE"}),
     ("/api/schedule", "can_ops", None),
     ("/api/timesheets", "can_ops", None),
-    ("/api/time-off", "can_ops", None),
+    ("/api/time-off", "can_ops|can_hr", None),  # either can approve leave
     ("/api/purchase-orders", "can_ops", None),
     ("/api/assets", "can_ops", None),
     ("/api/maintenance", "can_ops", None),
@@ -159,8 +159,9 @@ def enforce(request: Request, db: Session = Depends(get_db),
     if not user or not user.active:
         raise HTTPException(401, "Not signed in")
     for perm in areas:
-        if not has(user, perm):
-            raise HTTPException(403, f"You don't have access to {PERMISSIONS[perm].lower()}. Ask an admin.")
+        options = perm.split("|")
+        if not any(has(user, p) for p in options):
+            raise HTTPException(403, f"You don't have access to {PERMISSIONS[options[0]].lower()}. Ask an admin.")
     for model, raw in targets:
         try:
             obj = db.get(model, int(raw))

@@ -42,10 +42,10 @@ function Funnel({ d }: { d: Dash }) {
         const y = 8 + i * 38;
         return (
           <g key={label}>
-            <text x="0" y={y + 19} fontSize="13" fill="#1c2430">{label}</text>
+            <text x="0" y={y + 19} fontSize="13" fill="#161616">{label}</text>
             <rect x="110" y={y} width={w} height="28" rx="4" fill={SERIES[0]} />
-            <text x={116 + w} y={y + 19} fontSize="13" fill="#1c2430" fontWeight="600">{n}</text>
-            <text x={150 + w} y={y + 19} fontSize="12" fill="#6b7686">{note}</text>
+            <text x={116 + w} y={y + 19} fontSize="13" fill="#161616" fontWeight="600">{n}</text>
+            <text x={150 + w} y={y + 19} fontSize="12" fill="#6f6a66">{note}</text>
           </g>
         );
       })}

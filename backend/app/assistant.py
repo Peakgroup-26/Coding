@@ -23,7 +23,7 @@ from .models import BudgetLine, ChatMessage, ChatSession, Customer, Invoice, Job
 
 log = logging.getLogger(__name__)
 
-SYSTEM = """You are Ask Peak, the assistant for everyone at Peak Plumbing & Gas Services (Sunshine Coast, Queensland): \
+SYSTEM = """You are Ask lorojo, the assistant for everyone at Peak Plumbing & Gas Services (Sunshine Coast, Queensland): \
 plumbing, gas, maintenance, commercial hydraulics and civil. You answer questions from the company's live records \
 using your tools, and build reports on request.
 
@@ -369,7 +369,7 @@ def visible(db: Session, user: User) -> list[dict]:
 def ask(db: Session, user: User, text: str) -> dict:
     model = chat.get_model()
     if model is None:
-        raise AIUnavailable("The AI isn't switched on for this server (no API key), so Ask Peak can't answer yet.")
+        raise AIUnavailable("The AI isn't switched on for this server (no API key), so Ask lorojo can't answer yet.")
     s = session(db, user)
     if sum(len(json.dumps(m.content)) for m in db.scalars(select(ChatMessage).where(ChatMessage.session_id == s.id))) > chat.MAX_SESSION_CHARS:
         s = session(db, user, fresh=True)

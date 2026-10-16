@@ -1,4 +1,7 @@
-# Peak: estimating, jobs, the team's phones and the money in one place
+# lorojo: all of it, one place
+
+Estimating, jobs, the team's phones, people and the money, built for Peak Plumbing & Gas Services. The app is branded lorojo
+(logo, black / orange #ff6a13 / peach #ffb27a / white); customer-facing emails still go out as Peak.
 
 A web app for Peak Plumbing & Gas Services. It runs the business from first enquiry to paid invoice: estimating and tendering,
 live jobs (maintenance to large commercial and civil), scheduling, the team clocking in on their phones, plant and vehicle
@@ -8,6 +11,95 @@ The estimating side turns commercial hydraulic drawings into measured, staged qu
 **Status:** the operations side (above) is built and tested with sample data. **Estimating: all five phases in the brief are built,** plus the autopilot ("drop the plans in") and the civil BOQ. They have been tested on generated drawings; tuning against Peak's real drawings and data comes next (see "Before going live").
 
 **Putting it on the Plesk server:** see [deploy/PLESK.md](deploy/PLESK.md).
+
+## People (BambooHR-style)
+
+Under **People** (needs the People permission, `can_hr`):
+
+- **Team, org chart and directory.** Profiles, emergency contacts, uniform and boot sizes, manager, start date, award and
+  apprentice year.
+- **Pay history.** A new pay rate can update the job cost rate as pay × (1 + on-costs).
+- **Licences, tickets, training and inductions.**
+  - Expiry dates are worked out from each type's renewal period.
+  - Each trade has a list of what it must hold.
+  - Reminders go out at 60, 30 and 7 days before expiry and on the day.
+  - The boys snap their cards on the phone and the office ticks them as checked.
+- **Leave balances.** Opening balance + built up − taken.
+  - Annual and personal leave build up from approved timesheet hours and paid leave, capped at the normal week.
+  - Long service builds up with service.
+  - Each person sees a balance-by-a-date projection.
+  - Leave owed in dollars.
+- **Onboarding and offboarding checklists.** Steps for HR, the manager and the new starter. On offboarding, gear to
+  collect is listed and the sign-in stops after the last day.
+- **Policies and contracts.** Signed on the phone with a drawn signature. A new version asks everyone again.
+- **Reviews and goals.** Reviews have a self side and a manager side, and the manager's side is shared when ready.
+- **Staff surveys with eNPS.** Anonymous, with department breakdowns only for groups of 3 or more.
+- **Hiring.**
+  - The public careers page is at `/careers`, with résumé upload.
+  - Candidates move through a pipeline with ratings and notes.
+  - Hire turns a candidate into a user with onboarding.
+- **Also:** news to the team, private employee files kept apart from company documents, gear issued, and HR reports
+  (headcount, turnover, tenure, leave owed, licence compliance, birthdays and anniversaries).
+
+Everyone has **Me** in the phone app (`/field/me`, also in the office menu): news, things to sign or fill in, leave
+balances, licences, details, gear, files and the team directory.
+
+## Boards and My work (Monday.com-style)
+
+**Boards** come from templates:
+
+- office tasks
+- tender pipeline
+- project programme
+- safety incidents and hazards
+- vehicle, tool and PPE requests
+- marketing calendar
+- weekly yard checklist
+
+**What a board holds:**
+
+- groups of items, with subitems
+- typed columns: status, person, date, timeline, number, money, dropdown, tags, checkbox, rating, progress (from
+  subitems), job, customer, link, phone, email, time tracking and files
+- updates with @mentions, replies and likes
+- files and an activity log
+- dependencies between items
+
+**Views:** table (with group summaries and bulk edit), kanban, calendar, timeline / Gantt (with dependency arrows),
+workload and chart.
+
+**Automations:** when an item is created, a status or column changes, someone is assigned, a date arrives, on a schedule,
+when all subitems are done, or when an update is posted. They can then notify, email, set a value, move to a group, create
+items or subitems, assign people or archive.
+
+**More:** public forms (`/forms/<token>`), private boards with members, duplicate as a template, and Excel export.
+
+**My work** collects everything assigned to you by due date, plus your People to-dos. The phone shows your board tasks on
+Today and lets you change their status, post updates and add photos.
+
+## Estimating workbook (CostX / CANDY-style)
+
+On a tender, **Workbook & quotes**:
+
+- **Workbook rows.**
+  - Quantity is typed, comes from a formula using job variables (weeks, levels, units), or is linked live to a take-off
+    quantity (`q`).
+  - Rate is typed, comes from one resource, or from a build-up.
+  - Rows price into the same estimate, margins, budget (labour, materials, plant, subcontract) and Simpro export as the
+    take-off.
+  - A broken formula or link blocks sign-off.
+- **Rate library** (`/rate-library`).
+  - Resources: labour, plant, material and subcontract, imported from CSV or Excel.
+  - Build-ups with waste.
+  - Change a rate and everything using it reprices.
+- **Subcontract and supply packages.** Ask for quotes by email, enter prices, level them (plugs for exclusions), compare
+  against the lowest and the spread, then award into the workbook.
+- **Versions.** Save the priced estimate and compare any two, or a version with now, line by line.
+- **Programme and cash flow.**
+  - Spread the estimate over activities by stage with S, even, front- or back-loaded curves.
+  - Monthly claims allow for retention (with a cap and two releases), payment terms and supplier terms.
+  - Shows the peak funding the job needs.
+  - "Make a programme board" turns the programme into a timeline board.
 
 ## Operations: from won quote to paid invoice
 
@@ -472,7 +564,10 @@ backend/app/
   crm.py, messaging.py  follow-up rules, feedback and NPS; email and SMS
   supplier_prices.py  supplier price files, matching products, cheapest supplier
   xero.py             the Xero connection and sync
-  assistant.py        Ask Peak, the company-wide assistant
+  assistant.py        Ask lorojo, the company-wide assistant (AskPeak in the code)
+  hr.py               People: profiles, pay, licences, leave balances, onboarding, policies, reviews, surveys, hiring
+  boards.py           boards: columns and values, automations, views' data, My work
+  estimating.py       the estimating workbook: resources, build-ups, rows, packages, versions, programme cash flow
   scheduler.py        background jobs: messages, reminders, Xero sync
   revision.py         revision compare
   markup.py           marked-up PDF

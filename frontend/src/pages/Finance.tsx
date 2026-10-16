@@ -44,12 +44,12 @@ function CashChart({ weeks }: { weeks: Week[] }) {
   return (
     <figure>
       <svg className="chart" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Cash flow by week">
-        {[min, 0, max].map((v, i) => <g key={i}><line x1={L} x2={W - 10} y1={y(v)} y2={y(v)} stroke="#e3e7ee" /><text x={L - 6} y={y(v) + 4} fontSize="11" textAnchor="end" fill="#6b7686">{money(v)}</text></g>)}
+        {[min, 0, max].map((v, i) => <g key={i}><line x1={L} x2={W - 10} y1={y(v)} y2={y(v)} stroke="#e7e2dd" /><text x={L - 6} y={y(v) + 4} fontSize="11" textAnchor="end" fill="#6f6a66">{money(v)}</text></g>)}
         {weeks.map((w, i) => (
           <g key={w.week}>
             <rect x={L + i * bw + 3} y={y(w.in_total)} width={bw / 2 - 4} height={Math.max(0, y(0) - y(w.in_total))} rx="2" fill={SERIES[0]}><title>{`Week of ${fmtDate(w.week)}: in ${money(w.in_total)}`}</title></rect>
             <rect x={L + i * bw + bw / 2 + 1} y={y(w.out_total)} width={bw / 2 - 4} height={Math.max(0, y(0) - y(w.out_total))} rx="2" fill={SERIES[1]}><title>{`out ${money(w.out_total)}`}</title></rect>
-            {(weeks.length <= 13 || i % 2 === 0) && <text x={L + i * bw + bw / 2} y={H - 8} fontSize="10" textAnchor="middle" fill="#1c2430">{fmtDate(w.week).slice(0, 5)}</text>}
+            {(weeks.length <= 13 || i % 2 === 0) && <text x={L + i * bw + bw / 2} y={H - 8} fontSize="10" textAnchor="middle" fill="#161616">{fmtDate(w.week).slice(0, 5)}</text>}
           </g>
         ))}
         <polyline fill="none" stroke={SERIES[2]} strokeWidth="2.5" points={weeks.map((w, i) => `${L + i * bw + bw / 2},${y(w.balance)}`).join(" ")} />

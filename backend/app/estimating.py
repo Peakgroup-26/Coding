@@ -137,7 +137,8 @@ def line_unit(line: EstimateLine, resources: dict[str, Resource], buildups: dict
         if r is None:
             return {"labour_hours": 0.0, "labour": 0.0, "material": 0.0, "plant": 0.0, "subcontract": 0.0}, f"No resource {line.rate_code}"
         cat = r.kind if r.kind in CATS else "material"
-        u = {"labour_hours": 1.0 if r.kind == "labour" else 0.0, "labour": 0.0, "material": 0.0, "plant": 0.0, "subcontract": 0.0}
+        hourly = r.kind == "labour" and r.unit.lower() in ("h", "hr", "hrs", "hour", "hours")
+        u = {"labour_hours": 1.0 if hourly else 0.0, "labour": 0.0, "material": 0.0, "plant": 0.0, "subcontract": 0.0}
         u[cat] = r.rate
         return u, ""
     return {"labour_hours": float(line.labour_hours or 0), "labour": float(line.labour_hours or 0) * float(line.labour_rate or 0),
@@ -188,6 +189,10 @@ def priced_lines(db: Session, job: Job) -> list[dict]:
 
 def workbook(db: Session, job: Job) -> dict:
     rows = priced_lines(db, job)
+    first = {}
+    for r in rows:  # sections in the order they were started (Preliminaries first if it came first), not A-Z
+        first[r["section"]] = min(first.get(r["section"], r["id"]), r["id"])
+    rows.sort(key=lambda r: (first[r["section"]], r["position"], r["id"]))
     sections: dict[str, dict] = {}
     for r in rows:
         s = sections.setdefault(r["section"], {"name": r["section"], "lines": [], "cost": 0.0, "sell": 0.0, "labour_hours": 0.0})

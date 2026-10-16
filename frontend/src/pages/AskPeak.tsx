@@ -1,4 +1,4 @@
-/* Ask Peak: talk or type to the company assistant from any page; answers come with reports. And the notification bell. */
+/* Ask lorojo (code name AskPeak): talk or type to the company assistant from any page; answers come with reports. And the notification bell. */
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, download } from "../api";
@@ -35,7 +35,7 @@ export function ReportChart({ r }: { r: Report }) {
     <figure className="report-chart">
       <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={r.title}>
         {[0, 0.5, 1].map((f) => { const v = min + (max - min) * f; return (
-          <g key={f}><line x1={L} x2={W - 8} y1={y(v)} y2={y(v)} stroke="#e3e7ee" /><text x={L - 6} y={y(v) + 4} fontSize="11" textAnchor="end" fill="#6b7686">{fmtCell(Math.round(v))}</text></g>); })}
+          <g key={f}><line x1={L} x2={W - 8} y1={y(v)} y2={y(v)} stroke="#e7e2dd" /><text x={L - 6} y={y(v) + 4} fontSize="11" textAnchor="end" fill="#6f6a66">{fmtCell(Math.round(v))}</text></g>); })}
         {r.chart.type === "bar" ? rows.map((row, i) => ys.map((yi, k) => {
           const v = Number(row[yi]) || 0;
           return <rect key={`${i}-${k}`} x={x(i) - (bw * ys.length) / 2 + k * bw} y={Math.min(y(v), y(0))} width={bw - 2} height={Math.abs(y(v) - y(0))} rx="2" fill={SERIES[k]}>
@@ -44,7 +44,7 @@ export function ReportChart({ r }: { r: Report }) {
           <polyline key={k} fill="none" stroke={SERIES[k]} strokeWidth="2" points={rows.map((row, i) => `${x(i)},${y(Number(row[yi]) || 0)}`).join(" ")} />
         ))}
         {rows.map((row, i) => (rows.length <= 12 || i % Math.ceil(rows.length / 12) === 0) &&
-          <text key={i} x={x(i)} y={H - 14} fontSize="11" textAnchor="middle" fill="#1c2430">{String(row[xi]).slice(0, 14)}</text>)}
+          <text key={i} x={x(i)} y={H - 14} fontSize="11" textAnchor="middle" fill="#161616">{String(row[xi]).slice(0, 14)}</text>)}
       </svg>
       {ys.length > 1 && <figcaption className="legend">{ys.map((yi, k) => <span key={yi}><i style={{ background: SERIES[k] }} /> {r.columns[yi]}</span>)}</figcaption>}
     </figure>
@@ -71,8 +71,8 @@ export function AskPeakButton() {
   const [open, setOpen] = useState(false);
   return (
     <>
-      <button className="ask-btn" onClick={() => setOpen(true)} title="Ask Peak anything about jobs, hours, money, plant or customers">
-        <span aria-hidden>✦</span> <span className="ask-label">Ask Peak…</span>
+      <button className="ask-btn" onClick={() => setOpen(true)} title="Ask lorojo anything about jobs, hours, money, plant or customers">
+        <span aria-hidden>✦</span> <span className="ask-label">Ask lorojo…</span>
       </button>
       {open && <AskPeak onClose={() => setOpen(false)} />}
     </>
@@ -106,9 +106,9 @@ function AskPeak({ onClose }: { onClose: () => void }) {
   const submit = (e: FormEvent) => { e.preventDefault(); send(text); };
   return (
     <div className="ask-back" onClick={onClose}>
-      <aside className="ask-panel" onClick={(e) => e.stopPropagation()} aria-label="Ask Peak">
+      <aside className="ask-panel" onClick={(e) => e.stopPropagation()} aria-label="Ask lorojo">
         <div className="row">
-          <h2 style={{ margin: 0 }}>✦ Ask Peak</h2><span className="spacer" />
+          <h2 style={{ margin: 0 }}>✦ Ask lorojo</h2><span className="spacer" />
           <button className="link small" onClick={async () => { await api.post("/api/assistant/new"); setMsgs([]); }}>New conversation</button>
           <button className="link" onClick={onClose} aria-label="Close">✕</button>
         </div>

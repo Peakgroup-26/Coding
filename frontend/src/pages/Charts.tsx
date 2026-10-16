@@ -3,10 +3,10 @@
    recessive 1px gridlines; one y-axis per chart; a legend for every multi-series chart. */
 import { useState } from "react";
 
-export const SERIES = ["#2a78d6", "#eb6834", "#1baf7a"];
-const GRID = "#e3e7ee";
-const INK = "#1c2430";
-const MUTED = "#6b7686";
+export const SERIES = ["#ff6a13", "#2b2b2b", "#ffb27a"];
+const GRID = "#e7e2dd";
+const INK = "#161616";
+const MUTED = "#6f6a66";
 
 const fmtDate = (iso: string) => new Date(iso + "T00:00:00").toLocaleDateString("en-AU", { day: "numeric", month: "short" });
 

@@ -6,13 +6,14 @@ import type { AiStats, AiStatus, Job, Level, Sheet, Totals } from "../types";
 import { fmtM } from "../util";
 import { Audit, Checks, Fittings, StageMatrixView } from "./Estimate";
 import { PricingTab } from "./Pricing";
+import { EstimatingTab } from "./Workbook";
 
 const SHEET_TYPES = ["plan", "section", "detail", "schematic", "legend", "cover", "other"];
 
-type Tab = "sheets" | "levels" | "totals" | "fittings" | "pricing" | "checks" | "audit";
+type Tab = "sheets" | "levels" | "totals" | "fittings" | "workbook" | "pricing" | "checks" | "audit";
 const TABS: [Tab, string][] = [
   ["sheets", "Sheet register"], ["levels", "Levels"], ["totals", "Totals"],
-  ["fittings", "Fittings & sundries"], ["pricing", "Pricing"], ["checks", "Check-measure"], ["audit", "Audit log"],
+  ["fittings", "Fittings & sundries"], ["workbook", "Workbook & quotes"], ["pricing", "Pricing"], ["checks", "Check-measure"], ["audit", "Audit log"],
 ];
 
 export default function JobPage() {
@@ -71,6 +72,7 @@ export default function JobPage() {
       {tab === "levels" && <Levels jobId={job.id} />}
       {tab === "totals" && <><TotalsView jobId={job.id} /><StageMatrixView jobId={job.id} /></>}
       {tab === "fittings" && <Fittings jobId={job.id} locked={final} />}
+      {tab === "workbook" && <EstimatingTab jobId={job.id} locked={final} />}
       {tab === "pricing" && <PricingTab jobId={job.id} locked={final} onJobChange={loadJob} />}
       {tab === "checks" && <Checks jobId={job.id} onChange={loadJob} />}
       {tab === "audit" && <Audit jobId={job.id} />}
