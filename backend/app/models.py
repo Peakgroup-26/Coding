@@ -5,7 +5,7 @@ Geometry is stored in sheet coordinates: PDF points (1/72 inch) on the page as d
 """
 from datetime import date, datetime, timezone
 
-from sqlalchemy import JSON, Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint, true
+from sqlalchemy import JSON, Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint, false, true
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .db import Base
@@ -30,6 +30,14 @@ class User(Base):
     can_past_rates: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())  # previous civil job rates
     can_pricing: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())  # price books, mappings, rules
     sectors: Mapped[list | None] = mapped_column(JSON, nullable=True)  # residential / commercial / maintenance; empty = all
+    can_ops: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())  # live jobs, scheduling, purchasing, customers
+    can_finance: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())  # WIP, budgets, cash flow, invoices, costs
+    # Staff details (ops.py). role "field" = tradies who only use the phone app.
+    trade: Mapped[str] = mapped_column(String(30), default="", server_default="")  # plumber | apprentice | labourer | supervisor | office | manager
+    phone: Mapped[str] = mapped_column(String(50), default="", server_default="")
+    cost_rate: Mapped[float] = mapped_column(Float, default=0.0, server_default="0")  # $/h incl. on-costs (super, workcover, leave)
+    charge_rate: Mapped[float] = mapped_column(Float, default=0.0, server_default="0")  # $/h charged out on do-and-charge jobs
+    colour: Mapped[str] = mapped_column(String(10), default="", server_default="")  # on the schedule board
 
 
 class Stage(Base):
@@ -116,6 +124,24 @@ class Job(Base):
     work_type: Mapped[str] = mapped_column(String(100), default="", server_default="")  # picked from the sector's list
     value_band: Mapped[str] = mapped_column(String(40), default="", server_default="")  # rough size of the job, e.g. "10k-50k"
     outcome_reason: Mapped[str] = mapped_column(String(100), default="", server_default="")  # why it was lost / withdrawn
+    # Live job (ops.py): a won quote or a job raised directly (maintenance). work_status "" = still a quote/tender.
+    job_no: Mapped[str] = mapped_column(String(40), default="", server_default="", index=True)
+    work_status: Mapped[str] = mapped_column(String(20), default="", server_default="")  # scheduled | in_progress | on_hold | complete | invoiced | closed
+    customer_id: Mapped[int | None] = mapped_column(ForeignKey("customers.id"), nullable=True)
+    site_id: Mapped[int | None] = mapped_column(ForeignKey("sites.id"), nullable=True)
+    order_no: Mapped[str] = mapped_column(String(100), default="", server_default="")  # the client's PO / work order number
+    priority: Mapped[str] = mapped_column(String(10), default="normal", server_default="normal")  # low | normal | high | urgent
+    description: Mapped[str] = mapped_column(Text, default="", server_default="")  # scope of works / fault description
+    billing: Mapped[str] = mapped_column(String(20), default="fixed", server_default="fixed")  # fixed | charge (do-and-charge)
+    contract_value: Mapped[float | None] = mapped_column(Float, nullable=True)  # ex GST, before variations
+    percent_complete: Mapped[float | None] = mapped_column(Float, nullable=True)  # manual; empty = worked out from cost
+    finish_date: Mapped[date | None] = mapped_column(Date, nullable=True)  # planned finish
+    supervisor_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    retention_pct: Mapped[float] = mapped_column(Float, default=0.0, server_default="0")
+    payment_terms_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    signature: Mapped[str] = mapped_column(Text, default="", server_default="")  # client sign-off on completion (data URL)
+    signed_by_name: Mapped[str] = mapped_column(String(200), default="", server_default="")
     # Progress of the automatic read: {state, step, done, total, started_at, finished_at, attention: [...], summary}
     autopilot: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     # Set by accepted tender requirements (tender.py):
@@ -658,7 +684,10 @@ class ChatSession(Base):
     starts, and messages are only ever appended (the API requires the history to stay unchanged)."""
     __tablename__ = "chat_sessions"
     id: Mapped[int] = mapped_column(primary_key=True)
-    job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id", ondelete="CASCADE"), index=True)
+    job_id: Mapped[int | None] = mapped_column(ForeignKey("jobs.id", ondelete="CASCADE"), nullable=True, index=True)
+    scope: Mapped[str] = mapped_column(String(10), default="job", server_default="job")  # job | company (Ask Peak)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)  # Ask Peak: whose conversation
+    title: Mapped[str] = mapped_column(String(200), default="", server_default="")
     system: Mapped[str] = mapped_column(Text, default="")
     tool_names: Mapped[list | None] = mapped_column(JSON, nullable=True)
     summary: Mapped[str] = mapped_column(Text, default="")  # carried over from the previous session
@@ -675,6 +704,7 @@ class ChatMessage(Base):
     text: Mapped[str] = mapped_column(Text, default="")  # what to show on screen
     actions: Mapped[list | None] = mapped_column(JSON, nullable=True)  # [{tool, summary}] for display
     hidden: Mapped[bool] = mapped_column(Boolean, default=False)  # tool results and the like
+    reports: Mapped[list | None] = mapped_column(JSON, nullable=True)  # Ask Peak: tables / charts made for the person
     user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
@@ -700,3 +730,577 @@ class ProductivityRate(Base):
     hours_per_unit: Mapped[float] = mapped_column(Float)
     note: Mapped[str] = mapped_column(String(300), default="")
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+# ---------------------------------------------------------------------------
+# Operations: customers, staff time, purchasing, costs, project tools, finance
+# (ops.py, timesheets.py, purchasing.py, project.py, finance.py, integrations)
+# ---------------------------------------------------------------------------
+class Customer(Base):
+    __tablename__ = "customers"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(255), index=True)
+    kind: Mapped[str] = mapped_column(String(30), default="residential")  # client type, from the CRM list (crm.CLIENT_TYPES)
+    email: Mapped[str] = mapped_column(String(255), default="")
+    phone: Mapped[str] = mapped_column(String(50), default="")
+    address: Mapped[str] = mapped_column(String(500), default="")
+    abn: Mapped[str] = mapped_column(String(20), default="")
+    terms_days: Mapped[int] = mapped_column(Integer, default=30)
+    notes: Mapped[str] = mapped_column(Text, default="")
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    xero_id: Mapped[str] = mapped_column(String(64), default="")
+    no_marketing: Mapped[bool] = mapped_column(Boolean, default=False)  # never send review / feedback requests
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class CustomerContact(Base):
+    __tablename__ = "customer_contacts"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    customer_id: Mapped[int] = mapped_column(ForeignKey("customers.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(200))
+    position: Mapped[str] = mapped_column(String(100), default="")
+    phone: Mapped[str] = mapped_column(String(50), default="")
+    email: Mapped[str] = mapped_column(String(255), default="")
+
+
+class Site(Base):
+    __tablename__ = "sites"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    customer_id: Mapped[int | None] = mapped_column(ForeignKey("customers.id"), nullable=True, index=True)
+    name: Mapped[str] = mapped_column(String(255))
+    address: Mapped[str] = mapped_column(String(500), default="")
+    lat: Mapped[float | None] = mapped_column(Float, nullable=True)
+    lng: Mapped[float | None] = mapped_column(Float, nullable=True)
+    access_notes: Mapped[str] = mapped_column(Text, default="")  # keys, codes, parking, hazards
+    contact: Mapped[str] = mapped_column(String(300), default="")
+
+
+class Supplier(Base):
+    __tablename__ = "suppliers"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(255), index=True)
+    email: Mapped[str] = mapped_column(String(255), default="")
+    phone: Mapped[str] = mapped_column(String(50), default="")
+    account_no: Mapped[str] = mapped_column(String(100), default="")
+    terms_days: Mapped[int] = mapped_column(Integer, default=30)  # paid this many days after the end of the month of the bill
+    kind: Mapped[str] = mapped_column(String(20), default="materials")  # materials | subcontractor | plant | other
+    price_format: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # column mapping remembered for its price files
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    xero_id: Mapped[str] = mapped_column(String(64), default="")
+
+
+class BudgetLine(Base):
+    """A job's budget (Simpro cost centres / Procore budget lines): what it should cost, by category."""
+    __tablename__ = "budget_lines"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id", ondelete="CASCADE"), index=True)
+    category: Mapped[str] = mapped_column(String(20))  # labour | materials | subcontract | plant | other
+    description: Mapped[str] = mapped_column(String(255), default="")
+    stage: Mapped[str] = mapped_column(String(100), default="")
+    hours: Mapped[float] = mapped_column(Float, default=0.0)  # labour lines
+    cost: Mapped[float] = mapped_column(Float, default=0.0)
+    source: Mapped[str] = mapped_column(String(20), default="manual")  # estimate | manual | variation
+
+
+class ScheduleEntry(Base):
+    __tablename__ = "schedule_entries"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    job_id: Mapped[int | None] = mapped_column(ForeignKey("jobs.id", ondelete="CASCADE"), nullable=True, index=True)
+    day: Mapped[date] = mapped_column(Date, index=True)
+    start: Mapped[str] = mapped_column(String(5), default="07:00")  # HH:MM
+    end: Mapped[str] = mapped_column(String(5), default="15:30")
+    kind: Mapped[str] = mapped_column(String(20), default="work")  # work | leave | training | other
+    notes: Mapped[str] = mapped_column(Text, default="")
+    published: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class TimeEntry(Base):
+    """One stretch of time on a job (QuickBooks Time style). end_at empty = still clocked in."""
+    __tablename__ = "time_entries"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    job_id: Mapped[int | None] = mapped_column(ForeignKey("jobs.id"), nullable=True, index=True)
+    task: Mapped[str] = mapped_column(String(100), default="")  # stage / service item, e.g. Rough-in, Travel
+    start_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    end_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    break_minutes: Mapped[float] = mapped_column(Float, default=0.0)
+    break_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    notes: Mapped[str] = mapped_column(Text, default="")
+    start_lat: Mapped[float | None] = mapped_column(Float, nullable=True)
+    start_lng: Mapped[float | None] = mapped_column(Float, nullable=True)
+    end_lat: Mapped[float | None] = mapped_column(Float, nullable=True)
+    end_lng: Mapped[float | None] = mapped_column(Float, nullable=True)
+    source: Mapped[str] = mapped_column(String(20), default="app")  # app | manual | crew | office
+    status: Mapped[str] = mapped_column(String(20), default="open")  # open | submitted | approved | rejected
+    cost_rate: Mapped[float | None] = mapped_column(Float, nullable=True)  # $/h frozen when approved
+    approved_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    edited_reason: Mapped[str] = mapped_column(String(300), default="")
+    client_ref: Mapped[str] = mapped_column(String(64), default="", index=True)  # phone's id, so an offline retry isn't doubled
+    plant_id: Mapped[int | None] = mapped_column(ForeignKey("plant.id"), nullable=True)  # machine / truck operated (plant hire cost to the job)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class TimeOff(Base):
+    __tablename__ = "time_off"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    kind: Mapped[str] = mapped_column(String(20), default="annual")  # annual | sick | rdo | unpaid | other
+    start_date: Mapped[date] = mapped_column(Date)
+    end_date: Mapped[date] = mapped_column(Date)
+    hours: Mapped[float | None] = mapped_column(Float, nullable=True)
+    notes: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(String(20), default="requested")  # requested | approved | declined
+    decided_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class PurchaseOrder(Base):
+    __tablename__ = "purchase_orders"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    po_no: Mapped[str] = mapped_column(String(40), index=True)
+    job_id: Mapped[int | None] = mapped_column(ForeignKey("jobs.id"), nullable=True, index=True)
+    supplier_id: Mapped[int | None] = mapped_column(ForeignKey("suppliers.id"), nullable=True)
+    supplier_name: Mapped[str] = mapped_column(String(255), default="")
+    category: Mapped[str] = mapped_column(String(20), default="materials")  # materials | subcontract | plant | other
+    status: Mapped[str] = mapped_column(String(20), default="draft")  # draft | sent | received | billed | cancelled
+    order_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    required_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    delivery: Mapped[str] = mapped_column(String(300), default="")  # deliver to site / pick up from branch
+    notes: Mapped[str] = mapped_column(Text, default="")
+    bill_ref: Mapped[str] = mapped_column(String(100), default="")  # supplier's invoice number
+    bill_amount: Mapped[float | None] = mapped_column(Float, nullable=True)  # ex GST
+    bill_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    bill_due: Mapped[date | None] = mapped_column(Date, nullable=True)
+    bill_paid: Mapped[date | None] = mapped_column(Date, nullable=True)
+    xero_id: Mapped[str] = mapped_column(String(64), default="")
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    lines: Mapped[list["PoLine"]] = relationship(cascade="all, delete-orphan", order_by="PoLine.id")
+
+
+class PoLine(Base):
+    __tablename__ = "po_lines"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    po_id: Mapped[int] = mapped_column(ForeignKey("purchase_orders.id", ondelete="CASCADE"), index=True)
+    code: Mapped[str] = mapped_column(String(100), default="")
+    description: Mapped[str] = mapped_column(String(500), default="")
+    qty: Mapped[float] = mapped_column(Float, default=1.0)
+    unit: Mapped[str] = mapped_column(String(20), default="ea")
+    unit_cost: Mapped[float] = mapped_column(Float, default=0.0)
+    received_qty: Mapped[float] = mapped_column(Float, default=0.0)
+
+
+class JobCost(Base):
+    """A cost on a job that isn't time: supplier bills without a PO, materials from the van, plant hire, etc."""
+    __tablename__ = "job_costs"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id", ondelete="CASCADE"), index=True)
+    day: Mapped[date] = mapped_column(Date, index=True)
+    category: Mapped[str] = mapped_column(String(20), default="materials")
+    description: Mapped[str] = mapped_column(String(500), default="")
+    qty: Mapped[float] = mapped_column(Float, default=1.0)
+    unit_cost: Mapped[float] = mapped_column(Float, default=0.0)
+    amount: Mapped[float] = mapped_column(Float, default=0.0)  # qty x unit_cost, ex GST
+    supplier: Mapped[str] = mapped_column(String(255), default="")
+    ref: Mapped[str] = mapped_column(String(100), default="")
+    source: Mapped[str] = mapped_column(String(20), default="office")  # office | field | xero | reece
+    due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    paid_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    xero_id: Mapped[str] = mapped_column(String(64), default="")
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class Variation(Base):
+    __tablename__ = "variations"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id", ondelete="CASCADE"), index=True)
+    number: Mapped[int] = mapped_column(Integer)
+    title: Mapped[str] = mapped_column(String(255))
+    description: Mapped[str] = mapped_column(Text, default="")
+    reason: Mapped[str] = mapped_column(String(50), default="client request")  # client request | site instruction | latent condition | design change | other
+    status: Mapped[str] = mapped_column(String(20), default="pending")  # pending | submitted | approved | rejected
+    sell: Mapped[float] = mapped_column(Float, default=0.0)  # ex GST
+    cost: Mapped[float] = mapped_column(Float, default=0.0)  # our cost estimate (adds to budget when approved)
+    hours: Mapped[float] = mapped_column(Float, default=0.0)
+    client_ref: Mapped[str] = mapped_column(String(100), default="")
+    submitted_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    decided_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class Invoice(Base):
+    __tablename__ = "invoices"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    invoice_no: Mapped[str] = mapped_column(String(40), index=True)
+    job_id: Mapped[int | None] = mapped_column(ForeignKey("jobs.id"), nullable=True, index=True)
+    customer_id: Mapped[int | None] = mapped_column(ForeignKey("customers.id"), nullable=True)
+    kind: Mapped[str] = mapped_column(String(20), default="progress")  # progress | final | deposit | service
+    issue_date: Mapped[date] = mapped_column(Date)
+    due_date: Mapped[date] = mapped_column(Date)
+    description: Mapped[str] = mapped_column(Text, default="")
+    amount: Mapped[float] = mapped_column(Float, default=0.0)  # ex GST, before retention
+    retention: Mapped[float] = mapped_column(Float, default=0.0)  # held back this claim
+    gst_pct: Mapped[float] = mapped_column(Float, default=10.0)
+    status: Mapped[str] = mapped_column(String(20), default="draft")  # draft | sent | paid | void
+    paid_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    paid_amount: Mapped[float] = mapped_column(Float, default=0.0)
+    xero_id: Mapped[str] = mapped_column(String(64), default="")
+    lines: Mapped[list | None] = mapped_column(JSON, nullable=True)  # [{description, qty, unit_price}]
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class Document(Base):
+    """Stored files: on a job (photos, drawings, contracts, certificates) or company-wide (policies, SWMS)."""
+    __tablename__ = "documents"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    job_id: Mapped[int | None] = mapped_column(ForeignKey("jobs.id", ondelete="CASCADE"), nullable=True, index=True)
+    folder: Mapped[str] = mapped_column(String(100), default="General")
+    filename: Mapped[str] = mapped_column(String(255))
+    path: Mapped[str] = mapped_column(String(500))
+    size: Mapped[int] = mapped_column(Integer, default=0)
+    mime: Mapped[str] = mapped_column(String(100), default="")
+    title: Mapped[str] = mapped_column(String(255), default="")
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    supersedes_id: Mapped[int | None] = mapped_column(ForeignKey("documents.id"), nullable=True)
+    current: Mapped[bool] = mapped_column(Boolean, default=True)
+    linked_type: Mapped[str] = mapped_column(String(30), default="")  # project_item | diary | form | po | asset ...
+    linked_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    field_visible: Mapped[bool] = mapped_column(Boolean, default=True)  # the boys can open it on the phone
+    uploaded_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class ProjectItem(Base):
+    """Procore-style project records: RFIs, defects, site instructions, incidents, inspections, observations, submittals."""
+    __tablename__ = "project_items"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id", ondelete="CASCADE"), index=True)
+    kind: Mapped[str] = mapped_column(String(20))
+    number: Mapped[int] = mapped_column(Integer)
+    title: Mapped[str] = mapped_column(String(255))
+    body: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(String(20), default="open")  # open | answered | closed
+    priority: Mapped[str] = mapped_column(String(10), default="normal")
+    location: Mapped[str] = mapped_column(String(255), default="")
+    assignee_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    assignee_name: Mapped[str] = mapped_column(String(200), default="")  # someone outside the company
+    due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    response: Mapped[str] = mapped_column(Text, default="")
+    cost_impact: Mapped[float | None] = mapped_column(Float, nullable=True)
+    variation_id: Mapped[int | None] = mapped_column(ForeignKey("variations.id"), nullable=True)
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class DailyLog(Base):
+    __tablename__ = "daily_logs"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id", ondelete="CASCADE"), index=True)
+    day: Mapped[date] = mapped_column(Date, index=True)
+    weather: Mapped[str] = mapped_column(String(50), default="")
+    work_done: Mapped[str] = mapped_column(Text, default="")
+    delays: Mapped[str] = mapped_column(Text, default="")
+    deliveries: Mapped[str] = mapped_column(Text, default="")
+    visitors: Mapped[str] = mapped_column(Text, default="")
+    safety: Mapped[str] = mapped_column(Text, default="")
+    lost_hours: Mapped[float] = mapped_column(Float, default=0.0)  # wet weather / delays
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class FormTemplate(Base):
+    __tablename__ = "form_templates"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(200))
+    kind: Mapped[str] = mapped_column(String(30), default="checklist")  # swms | prestart | completion | inspection | test | checklist
+    fields: Mapped[list] = mapped_column(JSON, default=list)  # [{key, label, type: check|yesno|text|number|choice|signature|photo, options}]
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    required_on_completion: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class FormResponse(Base):
+    __tablename__ = "form_responses"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    template_id: Mapped[int] = mapped_column(ForeignKey("form_templates.id"))
+    job_id: Mapped[int | None] = mapped_column(ForeignKey("jobs.id", ondelete="CASCADE"), nullable=True, index=True)
+    asset_id: Mapped[int | None] = mapped_column(ForeignKey("assets.id"), nullable=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    answers: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class Asset(Base):
+    """Equipment on a site that needs servicing or testing (Simpro maintenance planner)."""
+    __tablename__ = "assets"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    site_id: Mapped[int] = mapped_column(ForeignKey("sites.id", ondelete="CASCADE"), index=True)
+    kind: Mapped[str] = mapped_column(String(50))  # Backflow device | TMV | Hot water unit | Grease trap | Pump | Fire hose reel ...
+    location: Mapped[str] = mapped_column(String(255), default="")
+    make: Mapped[str] = mapped_column(String(100), default="")
+    model: Mapped[str] = mapped_column(String(100), default="")
+    serial: Mapped[str] = mapped_column(String(100), default="")
+    installed: Mapped[date | None] = mapped_column(Date, nullable=True)
+    interval_months: Mapped[int] = mapped_column(Integer, default=12)
+    last_service: Mapped[date | None] = mapped_column(Date, nullable=True)
+    next_due: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
+    service_price: Mapped[float | None] = mapped_column(Float, nullable=True)  # ex GST, per service
+    form_template_id: Mapped[int | None] = mapped_column(ForeignKey("form_templates.id"), nullable=True)
+    notes: Mapped[str] = mapped_column(Text, default="")
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class AssetService(Base):
+    __tablename__ = "asset_services"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    asset_id: Mapped[int] = mapped_column(ForeignKey("assets.id", ondelete="CASCADE"), index=True)
+    job_id: Mapped[int | None] = mapped_column(ForeignKey("jobs.id"), nullable=True)
+    day: Mapped[date] = mapped_column(Date)
+    result: Mapped[str] = mapped_column(String(20), default="pass")  # pass | fail | serviced | not accessible
+    readings: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    notes: Mapped[str] = mapped_column(Text, default="")
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+
+
+class BudgetMonth(Base):
+    """The company's forecast for one month: what we expect to invoice and spend."""
+    __tablename__ = "budget_months"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    month: Mapped[str] = mapped_column(String(7), unique=True)  # YYYY-MM
+    revenue: Mapped[float] = mapped_column(Float, default=0.0)
+    labour: Mapped[float] = mapped_column(Float, default=0.0)
+    materials: Mapped[float] = mapped_column(Float, default=0.0)
+    subcontract: Mapped[float] = mapped_column(Float, default=0.0)
+    overheads: Mapped[float] = mapped_column(Float, default=0.0)
+    notes: Mapped[str] = mapped_column(Text, default="")
+
+
+class SupplierPrice(Base):
+    """One line of a supplier's price file. Old prices stay (current = False) for price history."""
+    __tablename__ = "supplier_prices"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    supplier_id: Mapped[int] = mapped_column(ForeignKey("suppliers.id", ondelete="CASCADE"), index=True)
+    code: Mapped[str] = mapped_column(String(100), index=True)  # supplier's product code
+    mfr_code: Mapped[str] = mapped_column(String(100), default="", index=True)  # manufacturer's code, to match across suppliers
+    barcode: Mapped[str] = mapped_column(String(50), default="", index=True)
+    description: Mapped[str] = mapped_column(String(500), default="")
+    brand: Mapped[str] = mapped_column(String(100), default="")
+    group: Mapped[str] = mapped_column(String(100), default="")  # product line, e.g. "PVC DWV fittings"
+    unit: Mapped[str] = mapped_column(String(20), default="ea")
+    price: Mapped[float] = mapped_column(Float)  # our trade price, ex GST
+    list_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    effective: Mapped[date] = mapped_column(Date, index=True)
+    current: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    import_id: Mapped[int | None] = mapped_column(ForeignKey("price_imports.id"), nullable=True)
+    product_key: Mapped[str] = mapped_column(String(120), default="", index=True)  # what it's matched on across suppliers
+
+
+class PriceImport(Base):
+    __tablename__ = "price_imports"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    supplier_id: Mapped[int] = mapped_column(ForeignKey("suppliers.id", ondelete="CASCADE"))
+    filename: Mapped[str] = mapped_column(String(255), default="")
+    effective: Mapped[date] = mapped_column(Date)
+    rows: Mapped[int] = mapped_column(Integer, default=0)
+    new_items: Mapped[int] = mapped_column(Integer, default=0)
+    price_up: Mapped[int] = mapped_column(Integer, default=0)
+    price_down: Mapped[int] = mapped_column(Integer, default=0)
+    source: Mapped[str] = mapped_column(String(20), default="file")  # file | reece_max | api
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class ProductMatch(Base):
+    """People's say on which supplier codes are the same product (or aren't), overriding the automatic match."""
+    __tablename__ = "product_matches"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    supplier_id: Mapped[int] = mapped_column(ForeignKey("suppliers.id", ondelete="CASCADE"))
+    code: Mapped[str] = mapped_column(String(100))
+    product_key: Mapped[str] = mapped_column(String(120))
+    __table_args__ = (UniqueConstraint("supplier_id", "code"),)
+
+
+class Integration(Base):
+    """A connection to another system (Xero, Reece maX): tokens and sync state. Secrets never leave the server."""
+    __tablename__ = "integrations"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(30), unique=True)  # xero | reece
+    status: Mapped[str] = mapped_column(String(20), default="disconnected")  # disconnected | connected | error
+    tenant_id: Mapped[str] = mapped_column(String(64), default="")
+    tenant_name: Mapped[str] = mapped_column(String(255), default="")
+    access_token: Mapped[str] = mapped_column(Text, default="")
+    refresh_token: Mapped[str] = mapped_column(Text, default="")
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    settings: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # account codes, what to sync
+    last_sync: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error: Mapped[str] = mapped_column(Text, default="")
+    log: Mapped[list | None] = mapped_column(JSON, nullable=True)  # recent sync results
+
+
+class Counter(Base):
+    """Running numbers: job, PO, invoice."""
+    __tablename__ = "counters"
+    name: Mapped[str] = mapped_column(String(40), primary_key=True)
+    value: Mapped[int] = mapped_column(Integer, default=0)
+
+
+# --- CRM: follow-ups after invoices, feedback and NPS (crm.py) ---
+class CrmRule(Base):
+    """What to send, to whom, and when: e.g. 3 days after a residential invoice, ask for a Google review."""
+    __tablename__ = "crm_rules"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(200))
+    trigger: Mapped[str] = mapped_column(String(20), default="invoice_sent")  # crm.TRIGGERS
+    client_types: Mapped[list | None] = mapped_column(JSON, nullable=True)  # empty = all
+    departments: Mapped[list | None] = mapped_column(JSON, nullable=True)  # residential | commercial | maintenance | civil; empty = all
+    delay_days: Mapped[int] = mapped_column(Integer, default=2)
+    channel: Mapped[str] = mapped_column(String(10), default="email")  # email | sms
+    subject: Mapped[str] = mapped_column(String(255), default="")
+    body: Mapped[str] = mapped_column(Text, default="")  # {first_name} {customer} {job} {job_no} {feedback_link} {review_link} {company}
+    ask_feedback: Mapped[bool] = mapped_column(Boolean, default=True)
+    ask_review: Mapped[bool] = mapped_column(Boolean, default=False)
+    min_days_between: Mapped[int] = mapped_column(Integer, default=30)  # don't pester the same customer
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class OutboundMessage(Base):
+    __tablename__ = "outbound_messages"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    customer_id: Mapped[int | None] = mapped_column(ForeignKey("customers.id", ondelete="CASCADE"), nullable=True, index=True)
+    job_id: Mapped[int | None] = mapped_column(ForeignKey("jobs.id"), nullable=True)
+    invoice_id: Mapped[int | None] = mapped_column(ForeignKey("invoices.id"), nullable=True)
+    rule_id: Mapped[int | None] = mapped_column(ForeignKey("crm_rules.id"), nullable=True)
+    feedback_id: Mapped[int | None] = mapped_column(ForeignKey("feedback.id"), nullable=True)
+    channel: Mapped[str] = mapped_column(String(10), default="email")
+    to: Mapped[str] = mapped_column(String(255), default="")
+    subject: Mapped[str] = mapped_column(String(255), default="")
+    body: Mapped[str] = mapped_column(Text, default="")
+    send_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    status: Mapped[str] = mapped_column(String(20), default="queued")  # queued | sent | failed | cancelled | skipped
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    error: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class Feedback(Base):
+    """One feedback request and, once answered, the answer. The token is the private link the customer opens."""
+    __tablename__ = "feedback"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    token: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    customer_id: Mapped[int | None] = mapped_column(ForeignKey("customers.id", ondelete="CASCADE"), nullable=True, index=True)
+    job_id: Mapped[int | None] = mapped_column(ForeignKey("jobs.id"), nullable=True)
+    kind: Mapped[str] = mapped_column(String(20), default="job")  # job | monthly
+    department: Mapped[str] = mapped_column(String(20), default="")  # residential | commercial | maintenance | civil
+    period: Mapped[str] = mapped_column(String(7), default="")  # YYYY-MM for monthly check-ins
+    contact_name: Mapped[str] = mapped_column(String(200), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    responded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    score: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 0-10: how likely to recommend us
+    ratings: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # {quality: 1-5, communication, timeliness, cleanliness, value}
+    comment: Mapped[str] = mapped_column(Text, default="")
+    review_clicked: Mapped[bool] = mapped_column(Boolean, default=False)
+    followed_up: Mapped[bool] = mapped_column(Boolean, default=False)  # someone has called about a low score
+
+
+class CrmActivity(Base):
+    """The customer's timeline: calls, meetings, notes, and what the system sent."""
+    __tablename__ = "crm_activities"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    customer_id: Mapped[int] = mapped_column(ForeignKey("customers.id", ondelete="CASCADE"), index=True)
+    kind: Mapped[str] = mapped_column(String(20), default="note")  # note | call | meeting | email | task
+    text: Mapped[str] = mapped_column(Text, default="")
+    due_date: Mapped[date | None] = mapped_column(Date, nullable=True)  # tasks: follow up by
+    done: Mapped[bool] = mapped_column(Boolean, default=False)
+    job_id: Mapped[int | None] = mapped_column(ForeignKey("jobs.id"), nullable=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+# --- Plant and vehicles (Plant Assessor style): register, pre-starts, defects, photos (plant.py) ---
+class Plant(Base):
+    __tablename__ = "plant"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    kind: Mapped[str] = mapped_column(String(20), default="plant")  # vehicle | plant | trailer | tool
+    name: Mapped[str] = mapped_column(String(200))  # e.g. "5t excavator", "Hilux – Dave"
+    fleet_no: Mapped[str] = mapped_column(String(50), default="")
+    category: Mapped[str] = mapped_column(String(50), default="")  # Excavator, Skid steer, Tipper, Ute, Roller...
+    rego: Mapped[str] = mapped_column(String(20), default="")
+    make: Mapped[str] = mapped_column(String(100), default="")
+    model: Mapped[str] = mapped_column(String(100), default="")
+    year: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    serial: Mapped[str] = mapped_column(String(100), default="")  # VIN / serial
+    assigned_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)  # company vehicle driven by
+    hours: Mapped[float | None] = mapped_column(Float, nullable=True)  # hour meter, latest reading
+    odometer: Mapped[float | None] = mapped_column(Float, nullable=True)  # km, latest reading
+    service_every_hours: Mapped[float | None] = mapped_column(Float, nullable=True)
+    service_every_km: Mapped[float | None] = mapped_column(Float, nullable=True)
+    last_service_hours: Mapped[float | None] = mapped_column(Float, nullable=True)
+    last_service_km: Mapped[float | None] = mapped_column(Float, nullable=True)
+    next_service_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    rego_expiry: Mapped[date | None] = mapped_column(Date, nullable=True)
+    insurance_expiry: Mapped[date | None] = mapped_column(Date, nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="in_service")  # in_service | out_of_service | in_repair | sold
+    hire_rate: Mapped[float] = mapped_column(Float, default=0.0)  # internal $/h charged to the job when operated
+    checklist_id: Mapped[int | None] = mapped_column(ForeignKey("form_templates.id"), nullable=True)  # its pre-start questions
+    photos_required: Mapped[bool] = mapped_column(Boolean, default=True)  # machine + fuel gauge photos at start and end of day
+    notes: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class PlantCheck(Base):
+    """A pre-start, start/end-of-day photo set, weekly vehicle check or wash, done on the phone."""
+    __tablename__ = "plant_checks"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    plant_id: Mapped[int] = mapped_column(ForeignKey("plant.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    kind: Mapped[str] = mapped_column(String(20))  # prestart | start_day | end_day | weekly | wash | service
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    answers: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    passed: Mapped[bool] = mapped_column(Boolean, default=True)
+    hours: Mapped[float | None] = mapped_column(Float, nullable=True)
+    odometer: Mapped[float | None] = mapped_column(Float, nullable=True)
+    fuel_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    photo_ids: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # {"machine": doc_id, "fuel": doc_id, "exterior": ..., "interior": ...}
+    time_entry_id: Mapped[int | None] = mapped_column(ForeignKey("time_entries.id"), nullable=True)
+    job_id: Mapped[int | None] = mapped_column(ForeignKey("jobs.id"), nullable=True)
+    lat: Mapped[float | None] = mapped_column(Float, nullable=True)
+    lng: Mapped[float | None] = mapped_column(Float, nullable=True)
+    notes: Mapped[str] = mapped_column(Text, default="")
+
+
+class PlantDefect(Base):
+    __tablename__ = "plant_defects"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    plant_id: Mapped[int] = mapped_column(ForeignKey("plant.id", ondelete="CASCADE"), index=True)
+    reported_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    reported_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    kind: Mapped[str] = mapped_column(String(20), default="defect")  # defect | damage | incident
+    severity: Mapped[str] = mapped_column(String(10), default="minor")  # minor | major | critical (takes it out of service)
+    description: Mapped[str] = mapped_column(Text, default="")
+    photo_ids: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    check_id: Mapped[int | None] = mapped_column(ForeignKey("plant_checks.id"), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="open")  # open | in_repair | fixed | no_action
+    fixed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    fixed_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    repair_notes: Mapped[str] = mapped_column(Text, default="")
+    repair_cost: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+
+class Notification(Base):
+    """In-app reminders and alerts (wash your vehicle, timesheet to approve, low feedback score...)."""
+    __tablename__ = "notifications"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    kind: Mapped[str] = mapped_column(String(30))
+    text: Mapped[str] = mapped_column(Text)
+    link: Mapped[str] = mapped_column(String(300), default="")
+    key: Mapped[str] = mapped_column(String(100), default="", index=True)  # stops the same reminder being made twice
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

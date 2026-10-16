@@ -39,3 +39,32 @@ AUTOPILOT_WORKERS = int(os.environ.get("AUTOPILOT_WORKERS", "2"))
 AUTOPILOT_SYNC = os.environ.get("AUTOPILOT_SYNC", "") == "1"  # run inline (tests)
 
 CORS_ORIGINS = [o for o in os.environ.get("CORS_ORIGINS", "http://localhost:5173").split(",") if o]
+
+# The web address people reach the app on, for links in emails and texts (feedback forms, Xero sign-in).
+PUBLIC_URL = os.environ.get("PUBLIC_URL", "http://localhost:8000").rstrip("/")
+
+# Phones stay signed in this long (people on the tools shouldn't log in every morning).
+FIELD_TOKEN_TTL_DAYS = int(os.environ.get("FIELD_TOKEN_TTL_DAYS", "60"))
+
+# Outgoing email (CRM follow-ups, feedback requests, POs). Any SMTP service: Microsoft 365, Google Workspace, SendGrid...
+SMTP_HOST = os.environ.get("SMTP_HOST", "")
+SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
+SMTP_USER = os.environ.get("SMTP_USER", "")
+SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
+SMTP_FROM = os.environ.get("SMTP_FROM", SMTP_USER)
+
+# Text messages through ClickSend (Australian SMS gateway). Leave blank to send email only.
+CLICKSEND_USERNAME = os.environ.get("CLICKSEND_USERNAME", "")
+CLICKSEND_API_KEY = os.environ.get("CLICKSEND_API_KEY", "")
+SMS_FROM = os.environ.get("SMS_FROM", "Peak")
+
+# Xero: make an app at developer.xero.com (Web app), redirect URI = PUBLIC_URL + /api/public/xero-callback
+XERO_CLIENT_ID = os.environ.get("XERO_CLIENT_ID", "")
+XERO_CLIENT_SECRET = os.environ.get("XERO_CLIENT_SECRET", "")
+# Apps made after 2 March 2026 must ask for Xero's granular scopes; check the list on Xero's Scopes page for your app.
+XERO_SCOPES = os.environ.get("XERO_SCOPES", "openid profile email offline_access accounting.contacts accounting.invoices "
+                             "accounting.payments accounting.banktransactions.read accounting.settings.read accounting.reports.read")
+XERO_SYNC_MINUTES = int(os.environ.get("XERO_SYNC_MINUTES", "15"))
+
+# Background jobs (sending messages, reminders, Xero sync). Off in tests; tests call the tick themselves.
+BACKGROUND_TASKS = os.environ.get("BACKGROUND_TASKS", "1") == "1"

@@ -12,6 +12,7 @@ from ..schemas import LoginIn, PasswordChange, UserIn, UserOut, UserPatch
 from . import get_or_404
 
 router = APIRouter(prefix="/api", tags=["auth"])
+STAFF_FIELDS = ("trade", "phone", "cost_rate", "charge_rate", "colour")
 
 
 def _sectors(values: list[str] | None) -> list[str] | None:
@@ -29,7 +30,10 @@ def login(body: LoginIn, db: Session = Depends(get_db)):
     user = db.scalar(select(User).where(func.lower(User.email) == body.email.strip().lower()))
     if not user or not user.active or not verify_password(body.password, user.password_hash):
         raise HTTPException(401, "Email or password is wrong")
-    return {"token": make_token(user.id), "user": UserOut.model_validate(user)}
+    from .. import config
+
+    ttl = config.FIELD_TOKEN_TTL_DAYS * 24 if user.role == "field" else None  # phones stay signed in
+    return {"token": make_token(user.id, ttl), "user": UserOut.model_validate(user)}
 
 
 @router.get("/auth/me", response_model=UserOut)
@@ -49,7 +53,8 @@ def create_user(body: UserIn, db: Session = Depends(get_db), _: User = Depends(r
     if db.scalar(select(User).where(func.lower(User.email) == body.email.lower())):
         raise HTTPException(409, "A user with that email already exists")
     user = User(email=body.email.lower(), name=body.name, role=body.role, password_hash=hash_password(body.password),
-                sectors=_sectors(body.sectors), **{k: getattr(body, k) for k in PERMISSIONS})
+                sectors=_sectors(body.sectors), **{k: getattr(body, k) for k in PERMISSIONS},
+                **{k: getattr(body, k) for k in STAFF_FIELDS})
     db.add(user)
     db.commit()
     return user
@@ -77,6 +82,9 @@ def update_user(user_id: int, body: UserPatch, db: Session = Depends(get_db), ad
             setattr(user, k, getattr(body, k))
     if body.sectors is not None:
         user.sectors = _sectors(body.sectors)
+    for k in STAFF_FIELDS:
+        if getattr(body, k) is not None:
+            setattr(user, k, getattr(body, k))
     record(db, admin.id, "user", user.id, "update", after={k: v for k, v in body.model_dump(exclude_unset=True).items() if k != "password"})
     db.commit()
     return user

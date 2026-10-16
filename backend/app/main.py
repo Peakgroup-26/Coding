@@ -11,8 +11,9 @@ from .access import enforce
 from .db import SessionLocal, engine
 from .migrate import migrate
 from .autopilot import recover_interrupted
-from .routers import (ai, auth_users, autopilot, chat, civil, estimate, jobs, polish, pricing, reports, rules, sales, settings,
-                      sheets, takeoff, tender)
+from .routers import (ai, assistant, auth_users, autopilot, chat, civil, estimate, field, jobs, money, ops, polish, pricing, project,
+                      purchasing, reports, rules, sales, settings, sheets, takeoff, tender, time)
+from . import scheduler
 from .seed import seed
 
 logging.basicConfig(level=logging.INFO)
@@ -26,7 +27,9 @@ async def lifespan(app: FastAPI):
     with SessionLocal() as db:
         seed(db)
     recover_interrupted()
+    scheduler.start()
     yield
+    scheduler.stop()
 
 
 def create_app() -> FastAPI:
@@ -34,8 +37,9 @@ def create_app() -> FastAPI:
     app.add_middleware(CORSMiddleware, allow_origins=config.CORS_ORIGINS, allow_methods=["*"], allow_headers=["*"])
     for r in (auth_users.router, settings.router, jobs.router, sheets.router, takeoff.router, rules.router, estimate.router, pricing.router, ai.router, polish.router,
               autopilot.router, civil.router, tender.router, chat.router, reports.router,
-              sales.router):
+              sales.router, ops.router, time.router, field.router, purchasing.router, project.router, money.router, assistant.router):
         app.include_router(r, dependencies=[Depends(enforce)])  # access.enforce: who can see which job
+    app.include_router(money.public)  # feedback forms and the Xero sign-in return: no sign-in needed
 
     @app.get("/api/health")
     def health():

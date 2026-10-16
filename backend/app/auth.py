@@ -14,7 +14,7 @@ from . import config
 from .db import get_db
 from .models import User
 
-ROLES = ("estimator", "reviewer", "admin")
+ROLES = ("estimator", "reviewer", "admin", "field")
 _ITERATIONS = 310_000
 
 
@@ -41,8 +41,9 @@ def _unb64(s: str) -> bytes:
     return base64.urlsafe_b64decode(s + "=" * (-len(s) % 4))
 
 
-def make_token(user_id: int) -> str:
-    payload = _b64(json.dumps({"uid": user_id, "exp": int(time.time()) + config.TOKEN_TTL_HOURS * 3600}).encode())
+def make_token(user_id: int, ttl_hours: float | None = None) -> str:
+    ttl = ttl_hours if ttl_hours is not None else config.TOKEN_TTL_HOURS
+    payload = _b64(json.dumps({"uid": user_id, "exp": int(time.time() + ttl * 3600)}).encode())
     sig = _b64(hmac.new(config.SECRET_KEY.encode(), payload.encode(), hashlib.sha256).digest())
     return f"{payload}.{sig}"
 
