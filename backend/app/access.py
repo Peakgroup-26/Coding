@@ -24,6 +24,7 @@ from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 
+from . import features
 from .auth import _bearer, read_token
 from .db import get_db
 from .models import (BudgetLine, CivilBoqLine, CountItem, DailyLog, Document, EstimateLine, EstimateSnapshot, Flag, FormResponse,
@@ -154,6 +155,15 @@ def enforce(request: Request, db: Session = Depends(get_db),
     user = db.get(User, uid) if uid else None
     if user is not None and user.role == "field" and not path.startswith(FIELD_PATHS):
         raise HTTPException(403, "This part of the app is for the office.")
+    if user is not None and user.active and user.role != "admin":
+        feat = features.feature_for(path)
+        if feat:
+            lv = features.level(db, user, feat)
+            need = "view" if request.method in ("GET", "HEAD") else "edit"
+            if lv == "none" or (need == "edit" and lv == "view"):
+                label = next(f[2] for f in features.FEATURES if f[0] == feat)
+                raise HTTPException(403, f"{label}: you can only look at this, not change it. Ask an admin."
+                                    if lv == "view" else f"You don't have access to {label}. Ask an admin.")
     if not targets and not areas:
         return
     if not user or not user.active:

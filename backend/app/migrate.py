@@ -26,17 +26,32 @@ def schema_diff(connection) -> list:
 
 def migrate(engine) -> None:
     cfg = Config(str(INI))
-    with engine.begin() as conn:
-        cfg.attributes["connection"] = conn
-        tables = set(inspect(conn).get_table_names())
-        if tables and "alembic_version" not in tables:
-            # A database made before migrations existed. Adopt it only if it already matches.
-            diff = schema_diff(conn)
-            if diff:
-                raise RuntimeError(
-                    "This database was created before migrations were added and doesn't match the current schema "
-                    f"({len(diff)} difference(s)). For a development database, delete it (backend/data/) and restart.")
-            log.info("Existing database matches the current schema; recording it as up to date.")
-            command.stamp(cfg, "head")
-        else:
-            command.upgrade(cfg, "head")
+    sqlite = engine.dialect.name == "sqlite"
+    with engine.connect() as conn:
+        if sqlite:
+            # SQLite changes a column by rebuilding its table; with foreign keys switched on, dropping the old copy of a table
+            # others point at (users, jobs) fails once there's data. Off for the migration (outside the transaction, as SQLite
+            # requires), then every foreign key is checked before it's switched back on.
+            conn.exec_driver_sql("PRAGMA foreign_keys=OFF")
+            conn.commit()
+        with conn.begin():
+            cfg.attributes["connection"] = conn
+            tables = set(inspect(conn).get_table_names())
+            if tables and "alembic_version" not in tables:
+                # A database made before migrations existed. Adopt it only if it already matches.
+                diff = schema_diff(conn)
+                if diff:
+                    raise RuntimeError(
+                        "This database was created before migrations were added and doesn't match the current schema "
+                        f"({len(diff)} difference(s)). For a development database, delete it (backend/data/) and restart.")
+                log.info("Existing database matches the current schema; recording it as up to date.")
+                command.stamp(cfg, "head")
+            else:
+                command.upgrade(cfg, "head")
+            if sqlite:
+                broken = conn.exec_driver_sql("PRAGMA foreign_key_check").fetchall()
+                if broken:
+                    raise RuntimeError(f"The migration left {len(broken)} broken links between tables, e.g. {broken[0]}")
+        if sqlite:
+            conn.exec_driver_sql("PRAGMA foreign_keys=ON")
+            conn.commit()

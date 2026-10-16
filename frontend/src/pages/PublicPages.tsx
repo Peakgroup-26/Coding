@@ -10,7 +10,7 @@ const TYPE: Record<string, string> = { full_time: "Full time", part_time: "Part 
 function PublicShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="public-page">
-      <header className="public-top"><img src="/brand/lorojo-logo.png" alt="lorojo" /></header>
+      <header className="public-top"><img src="/brand/lorojo-logo.png" alt="Lorojo" /></header>
       <main className="public-main">{children}</main>
     </div>
   );

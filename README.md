@@ -1,6 +1,6 @@
-# lorojo: all of it, one place
+# Lorojo: all of it, one place
 
-Estimating, jobs, the team's phones, people and the money, built for Peak Plumbing & Gas Services. The app is branded lorojo
+Estimating, jobs, the team's phones, people and the money, built for Peak Plumbing & Gas Services. The app is branded Lorojo
 (logo, black / orange #ff6a13 / peach #ffb27a / white); customer-facing emails still go out as Peak.
 
 A web app for Peak Plumbing & Gas Services. It runs the business from first enquiry to paid invoice: estimating and tendering,
@@ -11,6 +11,21 @@ The estimating side turns commercial hydraulic drawings into measured, staged qu
 **Status:** the operations side (above) is built and tested with sample data. **Estimating: all five phases in the brief are built,** plus the autopilot ("drop the plans in") and the civil BOQ. They have been tested on generated drawings; tuning against Peak's real drawings and data comes next (see "Before going live").
 
 **Putting it on the Plesk server:** see [deploy/PLESK.md](deploy/PLESK.md).
+
+## Who sees what (Admin → Feature access)
+
+Every tab and feature (around 45: boards, tenders, workbook, rate library, live jobs, schedule, timesheets, purchasing, plant,
+customers, CRM, finance, invoices, Xero, each part of People, and each tab of the phone app) can be set per person to
+**Hidden**, **View only** or **Can change**.
+
+- **Positions are presets.** Director, Office manager, Estimator, Project manager, Supervisor, Accounts, Plumber, Apprentice
+  and Labourer / operator come ready to edit. Give someone a position, then change any feature just for them.
+- **Changing a position updates everyone on it,** except the features set on that person.
+- **The server checks every request** (`features.py`, in `access.enforce`): hidden features answer 403 and view-only
+  features refuse changes. Menus, pages and phone tabs hide to match.
+- **Pay can be hidden** from HR users who shouldn't see it.
+- **Admins see everything.** The older ticks (Finance, People, plumbing / civil jobs, sectors) still apply on top.
+- **"Who sees what"** shows everyone against every feature.
 
 ## People (BambooHR-style)
 
@@ -564,7 +579,7 @@ backend/app/
   crm.py, messaging.py  follow-up rules, feedback and NPS; email and SMS
   supplier_prices.py  supplier price files, matching products, cheapest supplier
   xero.py             the Xero connection and sync
-  assistant.py        Ask lorojo, the company-wide assistant (AskPeak in the code)
+  assistant.py        Ask Lorojo, the company-wide assistant (AskPeak in the code)
   hr.py               People: profiles, pay, licences, leave balances, onboarding, policies, reviews, surveys, hiring
   boards.py           boards: columns and values, automations, views' data, My work
   estimating.py       the estimating workbook: resources, build-ups, rows, packages, versions, programme cash flow

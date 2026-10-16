@@ -1,4 +1,4 @@
-/* Ask lorojo (code name AskPeak): talk or type to the company assistant from any page; answers come with reports. And the notification bell. */
+/* Ask Lorojo (code name AskPeak): talk or type to the company assistant from any page; answers come with reports. And the notification bell. */
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, download } from "../api";
@@ -71,8 +71,8 @@ export function AskPeakButton() {
   const [open, setOpen] = useState(false);
   return (
     <>
-      <button className="ask-btn" onClick={() => setOpen(true)} title="Ask lorojo anything about jobs, hours, money, plant or customers">
-        <span aria-hidden>✦</span> <span className="ask-label">Ask lorojo…</span>
+      <button className="ask-btn" onClick={() => setOpen(true)} title="Ask Lorojo anything about jobs, hours, money, plant or customers">
+        <span aria-hidden>✦</span> <span className="ask-label">Ask Lorojo…</span>
       </button>
       {open && <AskPeak onClose={() => setOpen(false)} />}
     </>
@@ -106,9 +106,9 @@ function AskPeak({ onClose }: { onClose: () => void }) {
   const submit = (e: FormEvent) => { e.preventDefault(); send(text); };
   return (
     <div className="ask-back" onClick={onClose}>
-      <aside className="ask-panel" onClick={(e) => e.stopPropagation()} aria-label="Ask lorojo">
+      <aside className="ask-panel" onClick={(e) => e.stopPropagation()} aria-label="Ask Lorojo">
         <div className="row">
-          <h2 style={{ margin: 0 }}>✦ Ask lorojo</h2><span className="spacer" />
+          <h2 style={{ margin: 0 }}>✦ Ask Lorojo</h2><span className="spacer" />
           <button className="link small" onClick={async () => { await api.post("/api/assistant/new"); setMsgs([]); }}>New conversation</button>
           <button className="link" onClick={onClose} aria-label="Close">✕</button>
         </div>

@@ -929,13 +929,16 @@ def delete_announcement(ann_id: int, db: Session = Depends(get_db), _: User = De
 
 # (last, so /api/people/<word> routes above aren't taken for a person id)
 @router.get("/{user_id}")
-def person(user_id: int, db: Session = Depends(get_db), _: User = Depends(current_user)):
+def person(user_id: int, db: Session = Depends(get_db), viewer: User = Depends(current_user)):
+    from .. import features
+
     u = get_or_404(db, User, user_id)
+    see_pay = features.level(db, viewer, "hr_pay") != "none"
     p = hr.profile(db, u.id)
     names = _names(db)
     db.commit()
     warn = hr.settings(db)["warn_days"]
-    pays = list(db.scalars(select(PayChange).where(PayChange.user_id == u.id).order_by(PayChange.effective.desc(), PayChange.id.desc())))
+    pays = list(db.scalars(select(PayChange).where(PayChange.user_id == u.id).order_by(PayChange.effective.desc(), PayChange.id.desc()))) if see_pay else []
     cycles = {c.id: c for c in db.scalars(select(ReviewCycle))}
     signed = list(db.scalars(select(PolicySignature).where(PolicySignature.user_id == u.id)))
     policies = {x.id: x for x in db.scalars(select(Policy))}
@@ -943,9 +946,9 @@ def person(user_id: int, db: Session = Depends(get_db), _: User = Depends(curren
         "profile": profile_out(db, u, p, names),
         "pay": [{"id": x.id, "effective": _iso(x.effective), "pay_type": x.pay_type, "amount": x.amount, "position": x.position,
                  "reason": x.reason, "notes": x.notes, "by": names.get(x.created_by or 0, "")} for x in pays],
-        "hourly_rate": hr.hourly_rate(db, u.id, p), "cost_rate": u.cost_rate,
+        "hourly_rate": hr.hourly_rate(db, u.id, p) if see_pay else None, "cost_rate": u.cost_rate if see_pay else None, "see_pay": see_pay,
         "compliance": hr.compliance(db, u), "warn_days": warn,
-        "leave": hr.balances(db, u),
+        "leave": [b if see_pay else {**b, "value": None} for b in hr.balances(db, u)],
         "time_off": [{"id": t.id, "kind": t.kind, "start_date": _iso(t.start_date), "end_date": _iso(t.end_date),
                       "hours": round(hr.leave_days_hours(t, p), 2), "status": t.status, "notes": t.notes}
                      for t in db.scalars(select(TimeOff).where(TimeOff.user_id == u.id).order_by(TimeOff.start_date.desc()))],

@@ -18,6 +18,7 @@ export interface ClientChoice { name: string; jobs: number; contacts: string[]; 
 export interface User extends Permissions {
   id: number; email: string; name: string; role: "estimator" | "reviewer" | "admin" | "field"; active: boolean; sectors?: Sector[] | null;
   trade?: string; phone?: string; cost_rate?: number; charge_rate?: number; colour?: string;
+  position_id?: number | null; access?: Record<string, "none" | "view" | "edit">;
 }
 
 export interface ChatAction { tool: string; summary: string }

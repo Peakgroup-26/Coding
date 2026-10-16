@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api, download } from "../api";
-import { useApp } from "../App";
+import { sees, useApp } from "../App";
 import type { AiStats, AiStatus, Job, Level, Sheet, Totals } from "../types";
 import { fmtM } from "../util";
 import { Audit, Checks, Fittings, StageMatrixView } from "./Estimate";
@@ -64,7 +64,7 @@ export default function JobPage() {
       {final && <p className="banner-inline">This estimate is final and locked. A reviewer can reopen it.</p>}
       {error && <p className="error">{error}</p>}
       <div className="tabs">
-        {TABS.map(([t, label]) => (
+        {TABS.filter(([t]) => t !== "workbook" || sees(user, "workbook")).map(([t, label]) => (
           <button key={t} className={tab === t ? "active" : ""} onClick={() => setTab(t)}>{label}</button>
         ))}
       </div>

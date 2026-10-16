@@ -61,11 +61,12 @@ COUNT_TYPES = [
 
 
 def seed(db: Session) -> None:
-    from . import crm, hr, project
+    from . import crm, features, hr, project
 
     project.seed_forms(db)
     crm.seed_rules(db)
     hr.seed(db)
+    features.seed(db)
     if not db.scalar(select(Stage.id).limit(1)):
         for i, name in enumerate(STAGES):
             db.add(Stage(name=name, order=i))

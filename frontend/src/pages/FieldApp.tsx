@@ -4,7 +4,7 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { Link, NavLink, Route, Routes, useNavigate, useParams } from "react-router-dom";
 import { api, ApiError, fetchBlobUrl, upload } from "../api";
-import { useApp } from "../App";
+import { sees, useApp } from "../App";
 import { AskPeakButton } from "./AskPeak";
 import { Directory, FieldBoardItem, MeTab, MyBoardItems, ReviewForm, SignPolicy, SurveyForm, WorkItem } from "./FieldMe";
 import { addDays, DocOut, ErrorLine, fmtDay, getLocation, shrinkImage, hrs, monday, num, PhotoButton, SignaturePad, todayIso, useAction, useLoad } from "../ui";
@@ -69,7 +69,7 @@ export default function FieldApp({ onLogout }: { onLogout?: () => void }) {
   return (
     <div className="field-app">
       <header className="field-top">
-        <Link to="/field" className="brand" aria-label="lorojo"><img src="/brand/lorojo-logo.png" alt="lorojo" /></Link><span className="spacer" /><AskPeakButton />
+        <Link to="/field" className="brand" aria-label="Lorojo"><img src="/brand/lorojo-logo.png" alt="Lorojo" /></Link><span className="spacer" />{sees(user, "assistant") && <AskPeakButton />}
         {user.role !== "field" && <Link to="/" className="small">Back to the office app</Link>}
         {onLogout && <button className="link small" onClick={onLogout}>Sign out</button>}
       </header>
@@ -94,17 +94,18 @@ export default function FieldApp({ onLogout }: { onLogout?: () => void }) {
       </main>
       <nav className="field-tabs">
         <NavLink to="/field" end>🕒<span>Today</span></NavLink>
-        <NavLink to="/field/jobs">🧰<span>Jobs</span></NavLink>
-        <NavLink to="/field/schedule">📅<span>Schedule</span></NavLink>
-        <NavLink to="/field/prestart">🚜<span>Pre-start</span></NavLink>
-        <NavLink to="/field/timesheet">🧾<span>Timesheet</span></NavLink>
-        <NavLink to="/field/me">🙂<span>Me</span></NavLink>
+        {sees(user, "field_jobs") && <NavLink to="/field/jobs">🧰<span>Jobs</span></NavLink>}
+        {sees(user, "field_schedule") && <NavLink to="/field/schedule">📅<span>Schedule</span></NavLink>}
+        {sees(user, "field_prestart") && <NavLink to="/field/prestart">🚜<span>Pre-start</span></NavLink>}
+        {sees(user, "field_timesheet") && <NavLink to="/field/timesheet">🧾<span>Timesheet</span></NavLink>}
+        {sees(user, "field_me") && <NavLink to="/field/me">🙂<span>Me</span></NavLink>}
       </nav>
     </div>
   );
 }
 
 function TodayTab({ onQueued }: { onQueued: () => void }) {
+  const { user } = useApp();
   const { data: t, reload, error: loadErr } = useLoad<Today>("/api/field/today");
   const [picking, setPicking] = useState<"in" | "switch" | null>(null);
   const [run, error, busy, setError] = useAction();
@@ -138,7 +139,7 @@ function TodayTab({ onQueued }: { onQueued: () => void }) {
       {t.todo.reminders.map((b, i) => (
         <Link key={i} to={b.kind === "wash" ? `/field/prestart/${b.plant_id}?kind=wash` : "/field/prestart"} className="todo">{b.text}<span>›</span></Link>
       ))}
-      <section className={`clock-card ${cur ? (cur.on_break ? "break" : "on") : ""}`}>
+      {sees(user, "field_clock") && <section className={`clock-card ${cur ? (cur.on_break ? "break" : "on") : ""}`}>
         {cur ? (
           <>
             <div className="small">{cur.on_break ? "On a break" : "Clocked in"} since {cur.start_local}</div>
@@ -159,7 +160,7 @@ function TodayTab({ onQueued }: { onQueued: () => void }) {
             <button className="primary big-btn" onClick={() => setPicking("in")} disabled={busy || t.todo.blocking.length > 0}>Clock in</button>
           </>
         )}
-      </section>
+      </section>}
       {problems.map((p) => <p key={p} className="error">{p}</p>)}
       {msg && <p className="warn">{msg}</p>}
       <ErrorLine error={problems.length ? "" : error} />

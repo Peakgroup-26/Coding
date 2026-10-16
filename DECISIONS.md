@@ -271,7 +271,7 @@ uses its OAuth2 with the granular scopes required for apps made after March 2026
 107. **Ask Peak only reads.** It answers from the same functions the pages use, and its tools respect the person's permissions
 (money tools need Finance). Changes are made on the pages, where they're recorded under the person's name.
 
-108. **The app is branded lorojo** from the supplied logo: black header, orange (#ff6a13) for actions, peach (#ffb27a) as the
+108. **The app is branded Lorojo** from the supplied logo: black header, orange (#ff6a13) for actions, peach (#ffb27a) as the
 second colour, white cards on a warm light grey so tables stay readable in the sun. The logo files are cut from the PDF.
 Emails to customers still come from the company name in settings.
 
@@ -291,10 +291,17 @@ loop can't run away); dated and recurring ones are checked once a minute and fir
 records its error and never stops the change being saved.
 
 113. **Workbook rows price into the same estimate as the take-off,** with the job's margins, so the quote, the budget, WIP, the
-Simpro export and Ask lorojo all see them. Quantities can follow the take-off live; awarded subcontract quotes become a row
+Simpro export and Ask Lorojo all see them. Quantities can follow the take-off live; awarded subcontract quotes become a row
 that follows the quote. Without a price book the estimate is priced from the workbook alone.
 
 114. **The tender cash flow** spreads each stage's sell and cost over the activities it belongs to (S-curve by default), claims
 monthly, holds retention up to the cap, gets paid after the payment terms and pays suppliers after theirs (labour the same
 month), and returns retention half at practical completion and half after 12 months.
+
+115. **Access is per feature, per person, with positions as presets.** A person's level for a feature is what's set on them, else
+their position's, else "Can change", so nothing changes until an admin restricts it. The server maps each API path to a feature,
+so hiding a tab also stops the data behind it; things every page needs (signing in, settings, notifications, the staff list and
+the team directory) stay open. View only means reads are allowed and every change is refused, whatever the page tries.
+
+116. **The program is called Lorojo** (the logo, page titles, the phone app name and the assistant, "Ask Lorojo").
 

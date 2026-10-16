@@ -7,8 +7,9 @@ import Admin from "./Admin";
 import { jobStage } from "./Home";
 import ReportingSettings from "./ReportingSettings";
 import { Integrations, OpsSettings } from "./AdminOps";
+import AccessAdmin from "./Access";
 
-type Tab = "people" | "jobs" | "memory" | "reporting" | "settings" | "integrations" | "operations";
+type Tab = "people" | "access" | "jobs" | "memory" | "reporting" | "settings" | "integrations" | "operations";
 
 const SECTORS: [Sector, string][] = [["residential", "Res"], ["commercial", "Com"], ["maintenance", "Maint"]];
 
@@ -57,7 +58,7 @@ function People() {
               <td><b>{u.name || u.email}</b><div className="small muted">{u.email}</div></td>
               <td>
                 <select value={u.role} disabled={u.id === me.id} onChange={(e) => patch(u, { role: e.target.value })}>
-                  <option value="estimator">Estimator</option><option value="reviewer">Reviewer</option><option value="admin">Admin</option>
+                  <option value="field">Phone app only</option><option value="estimator">Office</option><option value="reviewer">Office + sign-off</option><option value="admin">Admin</option>
                   <option value="field">On the tools (phone app only)</option>
                 </select>
               </td>
@@ -246,7 +247,7 @@ function MemoryAdmin() {
 
 export default function AdminPortal() {
   const [tab, setTab] = useState<Tab>(() => (new URLSearchParams(window.location.search).get("tab") as Tab) || "people");
-  const tabs: [Tab, string][] = [["people", "People & permissions"], ["operations", "Operations & plant"], ["integrations", "Xero & messages"],
+  const tabs: [Tab, string][] = [["people", "People & permissions"], ["access", "Feature access"], ["operations", "Operations & plant"], ["integrations", "Xero & messages"],
     ["jobs", "All jobs"], ["memory", "AI memory"], ["reporting", "Reporting"], ["settings", "Lists & settings"]];
   return (
     <main className="page">
@@ -255,6 +256,7 @@ export default function AdminPortal() {
         {tabs.map(([k, l]) => <button key={k} className={tab === k ? "active" : ""} onClick={() => setTab(k)}>{l}</button>)}
       </div>
       {tab === "people" && <People />}
+      {tab === "access" && <AccessAdmin />}
       {tab === "jobs" && <AllJobs />}
       {tab === "memory" && <MemoryAdmin />}
       {tab === "reporting" && <ReportingSettings />}

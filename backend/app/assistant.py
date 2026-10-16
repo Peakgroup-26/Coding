@@ -23,7 +23,7 @@ from .models import BudgetLine, ChatMessage, ChatSession, Customer, Invoice, Job
 
 log = logging.getLogger(__name__)
 
-SYSTEM = """You are Ask lorojo, the assistant for everyone at Peak Plumbing & Gas Services (Sunshine Coast, Queensland): \
+SYSTEM = """You are Ask Lorojo, the assistant for everyone at Peak Plumbing & Gas Services (Sunshine Coast, Queensland): \
 plumbing, gas, maintenance, commercial hydraulics and civil. You answer questions from the company's live records \
 using your tools, and build reports on request.
 
@@ -327,15 +327,25 @@ def show_report(ctx: Ctx, title: str, columns: list, rows: list, summary: str = 
     return "Shown to the person."
 
 
+def money_ok(user: User) -> bool:
+    """Money tools need the Finance permission and the Finance feature not hidden for this person."""
+    from sqlalchemy.orm import object_session
+
+    from . import features
+
+    db = object_session(user)
+    return has(user, "can_finance") and (db is None or features.level(db, user, "finance") != "none")
+
+
 def schemas(user: User) -> list[dict]:
-    return [t.schema() for t in TOOLS.values() if not t.money or has(user, "can_finance")]
+    return [t.schema() for t in TOOLS.values() if not t.money or money_ok(user)]
 
 
 def run_tool(ctx: Ctx, name: str, args: dict) -> str:
     t = TOOLS.get(name)
     if t is None:
         raise ToolError(f"No tool called {name}")
-    if t.money and not has(ctx.user, "can_finance"):
+    if t.money and not money_ok(ctx.user):
         raise ToolError("This person doesn't have access to the money side. Say so.")
     out = t.fn(ctx, **args)
     return out if isinstance(out, str) else json.dumps(out, default=str)
@@ -369,7 +379,7 @@ def visible(db: Session, user: User) -> list[dict]:
 def ask(db: Session, user: User, text: str) -> dict:
     model = chat.get_model()
     if model is None:
-        raise AIUnavailable("The AI isn't switched on for this server (no API key), so Ask lorojo can't answer yet.")
+        raise AIUnavailable("The AI isn't switched on for this server (no API key), so Ask Lorojo can't answer yet.")
     s = session(db, user)
     if sum(len(json.dumps(m.content)) for m in db.scalars(select(ChatMessage).where(ChatMessage.session_id == s.id))) > chat.MAX_SESSION_CHARS:
         s = session(db, user, fresh=True)

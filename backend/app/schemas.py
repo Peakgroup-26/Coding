@@ -31,6 +31,7 @@ class UserOut(ORM):
     can_finance: bool = False
     can_hr: bool = False
     sectors: list[str] | None = None
+    position_id: int | None = None
     trade: str = ""
     phone: str = ""
     cost_rate: float = 0.0

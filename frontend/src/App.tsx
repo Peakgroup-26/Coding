@@ -42,6 +42,17 @@ export const useApp = () => useContext(AppCtx)!;
 
 /** Admins can do everything; everyone else has the permissions an admin gave them. */
 export const can = (user: User, permission: keyof Permissions) => user.role === "admin" || user[permission];
+/** What this person may do with a feature (Admin → Feature access): none, view or edit. */
+export const level = (user: User, feature: string) => (user.role === "admin" ? "edit" : user.access?.[feature] ?? "edit");
+export const sees = (user: User, feature: string) => level(user, feature) !== "none";
+
+/** A page behind a feature: hidden = a polite stop; view only = a banner, and the server refuses changes. */
+export function Gate({ f, children }: { f: string; children: JSX.Element }) {
+  const { user } = useApp();
+  const lv = level(user, f);
+  if (lv === "none") return <main className="page"><div className="card"><h2>Not available</h2><p className="muted">You don't have access to this part of Lorojo. Ask an admin if you need it.</p></div></main>;
+  return lv === "view" ? <><div className="view-only">👁 View only: you can look, but changes are turned off for you.</div>{children}</> : children;
+}
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -67,7 +78,10 @@ export default function App() {
       .finally(() => setChecked(true));
   }, []);
 
-  const onLogin = async (u: User) => { setUser(u); await reloadSettings(); nav(u.role === "field" ? "/field" : "/"); };
+  const onLogin = async (u: User) => {
+    const full = await api.get<User>("/api/auth/me").catch(() => u);  // with what they can see
+    setUser(full); await reloadSettings(); nav(full.role === "field" ? "/field" : "/");
+  };
   const logout = () => { setToken(null); setUser(null); nav("/login"); };
 
   if (!checked) return null;
@@ -114,12 +128,23 @@ export default function App() {
       ["/finance?tab=budget", "Budgets", fin], ["/finance?tab=invoices", "Invoices & debtors", fin],
       ["/purchasing?tab=prices", "Supplier prices", fin], ["/reports", "Job reports", true]] },
   ];
+  const FEATURE_OF: Record<string, string> = {
+    "/my-work": "my_work", "/boards": "boards", "/": "tenders", "/jobs": "tenders", "/sales": "sales", "/rate-library": "rate_library",
+    "/civil-rates": "civil_rates", "/price-books": "price_books", "/rules": "rules", "/mappings": "mappings", "/work": "live_jobs",
+    "/schedule": "schedule", "/timesheets": "timesheets", "/purchasing": "purchasing", "/plant": "plant", "/maintenance": "maintenance",
+    "/documents": "documents", "/customers": "customers", "/crm": "crm", "/finance": "finance", "/finance?tab=wip": "finance",
+    "/finance?tab=cash": "finance", "/finance?tab=budget": "finance", "/finance?tab=invoices": "invoices", "/purchasing?tab=prices": "supplier_prices",
+    "/reports": "reports", "/people": "hr_records", "/people?tab=leave": "hr_leave", "/people?tab=licences": "hr_licences",
+    "/people?tab=hiring": "hr_hiring", "/people?tab=reviews": "hr_reviews", "/people?tab=reports": "hr_records", "/field/me": "field_me",
+  };
+  for (const g of groups) g.links = g.links.map(([to, label, ok]) => [to, label, ok && (!FEATURE_OF[to] || sees(user, FEATURE_OF[to]))]);
+  const G = (f: string, el: JSX.Element) => <Gate f={f}>{el}</Gate>;
   return (
     <AppCtx.Provider value={{ user, settings, reloadSettings }}>
       <div className="app">
         <header className="topbar">
           <button className="burger" aria-label="Menu" onClick={() => setMenu(!menu)}>☰</button>
-          <Link to="/" className="brand" aria-label="lorojo home"><img src="/brand/lorojo-logo.png" alt="lorojo" /></Link>
+          <Link to="/" className="brand" aria-label="Lorojo home"><img src="/brand/lorojo-logo.png" alt="Lorojo" /></Link>
           <nav className={menu ? "open" : ""} onClick={(e) => { if ((e.target as HTMLElement).tagName === "A") { setMenu(false); closeMenus(); } }}>
             {groups.map((g) => g.links.some((l) => l[2]) && (
               <details key={g.label} className="more">
@@ -133,43 +158,43 @@ export default function App() {
             <Link to="/account" className="nav-account">My account</Link>
           </nav>
           <span className="spacer" />
-          <AskPeakButton />
+          {sees(user, "assistant") && <AskPeakButton />}
           <Bell />
           <Link to="/account" className="muted who">{user.name || user.email}</Link>
           <button className="link" onClick={logout}>Sign out</button>
         </header>
         <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/jobs" element={<Jobs />} />
-          <Route path="/jobs/:jobId" element={<JobOverview />} />
-          <Route path="/jobs/:jobId/details" element={<JobPage />} />
-          <Route path="/jobs/:jobId/reports" element={<JobReports />} />
-          <Route path="/reports" element={<Dashboard />} />
-          <Route path="/sales" element={<Sales />} />
-          <Route path="/civil-rates" element={<CivilRates />} />
-          <Route path="/sheets/:sheetId" element={<SheetViewer />} />
-          <Route path="/rules" element={<Rules />} />
-          <Route path="/price-books" element={<PriceBooks />} />
-          <Route path="/mappings" element={<Mappings />} />
-          <Route path="/work" element={<WorkBoard />} />
-          <Route path="/work/:jobId" element={<JobHub />} />
-          <Route path="/schedule" element={<Schedule />} />
-          <Route path="/timesheets" element={<Timesheets />} />
-          <Route path="/purchasing" element={<Purchasing />} />
-          <Route path="/plant" element={<PlantPage />} />
-          <Route path="/plant/:plantId" element={<PlantPage />} />
-          <Route path="/maintenance" element={<Maintenance />} />
-          <Route path="/documents" element={<CompanyDocs />} />
-          <Route path="/customers" element={<Customers />} />
-          <Route path="/customers/:customerId" element={<CustomerPage />} />
-          <Route path="/crm" element={<Crm />} />
-          <Route path="/finance" element={<Finance />} />
-          <Route path="/people" element={hr ? <People /> : <Navigate to="/field/me" />} />
-          <Route path="/people/:userId" element={hr ? <PersonPage /> : <Navigate to="/field/me" />} />
-          <Route path="/boards" element={<Boards />} />
-          <Route path="/boards/:boardId" element={<BoardPage />} />
-          <Route path="/my-work" element={<MyWork />} />
-          <Route path="/rate-library" element={<RateLibrary />} />
+          <Route path="/" element={sees(user, "tenders") ? G("tenders", <Home />) : <Navigate to={sees(user, "my_work") ? "/my-work" : "/field"} />} />
+          <Route path="/jobs" element={G("tenders", <Jobs />)} />
+          <Route path="/jobs/:jobId" element={G("tenders", <JobOverview />)} />
+          <Route path="/jobs/:jobId/details" element={G("tenders", <JobPage />)} />
+          <Route path="/jobs/:jobId/reports" element={G("reports", <JobReports />)} />
+          <Route path="/reports" element={G("reports", <Dashboard />)} />
+          <Route path="/sales" element={G("sales", <Sales />)} />
+          <Route path="/civil-rates" element={G("civil_rates", <CivilRates />)} />
+          <Route path="/sheets/:sheetId" element={G("tenders", <SheetViewer />)} />
+          <Route path="/rules" element={G("rules", <Rules />)} />
+          <Route path="/price-books" element={G("price_books", <PriceBooks />)} />
+          <Route path="/mappings" element={G("mappings", <Mappings />)} />
+          <Route path="/work" element={G("live_jobs", <WorkBoard />)} />
+          <Route path="/work/:jobId" element={G("live_jobs", <JobHub />)} />
+          <Route path="/schedule" element={G("schedule", <Schedule />)} />
+          <Route path="/timesheets" element={G("timesheets", <Timesheets />)} />
+          <Route path="/purchasing" element={G("purchasing", <Purchasing />)} />
+          <Route path="/plant" element={G("plant", <PlantPage />)} />
+          <Route path="/plant/:plantId" element={G("plant", <PlantPage />)} />
+          <Route path="/maintenance" element={G("maintenance", <Maintenance />)} />
+          <Route path="/documents" element={G("documents", <CompanyDocs />)} />
+          <Route path="/customers" element={G("customers", <Customers />)} />
+          <Route path="/customers/:customerId" element={G("customers", <CustomerPage />)} />
+          <Route path="/crm" element={G("crm", <Crm />)} />
+          <Route path="/finance" element={G("finance", <Finance />)} />
+          <Route path="/people" element={hr ? G("hr_records", <People />) : <Navigate to="/field/me" />} />
+          <Route path="/people/:userId" element={hr ? G("hr_records", <PersonPage />) : <Navigate to="/field/me" />} />
+          <Route path="/boards" element={G("boards", <Boards />)} />
+          <Route path="/boards/:boardId" element={G("boards", <BoardPage />)} />
+          <Route path="/my-work" element={G("my_work", <MyWork />)} />
+          <Route path="/rate-library" element={G("rate_library", <RateLibrary />)} />
           <Route path="/field/*" element={<FieldApp />} />
           <Route path="/admin" element={user.role === "admin" ? <AdminPortal /> : <Navigate to="/" />} />
           <Route path="/account" element={<Account />} />

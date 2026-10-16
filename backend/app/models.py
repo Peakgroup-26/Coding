@@ -39,6 +39,19 @@ class User(Base):
     charge_rate: Mapped[float] = mapped_column(Float, default=0.0, server_default="0")  # $/h charged out on do-and-charge jobs
     colour: Mapped[str] = mapped_column(String(10), default="", server_default="")  # on the schedule board
     can_hr: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())  # People: profiles, pay, leave, reviews, hiring
+    # Per-feature access (features.py): a position preset, plus this person's own changes {feature: none|view|edit}
+    position_id: Mapped[int | None] = mapped_column(ForeignKey("positions.id", name="fk_users_position_id_positions", ondelete="SET NULL"), nullable=True)
+    features: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
+
+class Position(Base):
+    """A preset of what a role sees: Estimator, Supervisor, Plumber... {feature key: none | view | edit}."""
+    __tablename__ = "positions"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(100), unique=True)
+    description: Mapped[str] = mapped_column(String(300), default="")
+    features: Mapped[dict] = mapped_column(JSON, default=dict)
+    position: Mapped[int] = mapped_column(Integer, default=0)
 
 
 class Stage(Base):
