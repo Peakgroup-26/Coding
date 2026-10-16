@@ -1,6 +1,9 @@
 export type Pt = [number, number];
 
-export interface Permissions { can_hydraulic: boolean; can_civil: boolean; can_all_jobs: boolean; can_past_rates: boolean; can_pricing: boolean }
+export interface Permissions {
+  can_hydraulic: boolean; can_civil: boolean; can_all_jobs: boolean; can_past_rates: boolean; can_pricing: boolean;
+  can_ops: boolean; can_finance: boolean;
+}
 export type Sector = "residential" | "commercial" | "maintenance";
 export type SalesStage = "lead" | "quoting" | "quote_sent" | "won" | "lost" | "withdrawn";
 export const SECTOR_LABELS: Record<Sector, string> = { residential: "Residential", commercial: "Commercial", maintenance: "Maintenance" };
@@ -12,7 +15,10 @@ export interface SalesSettings {
   sectors: { key: Sector; label: string }[]; counts: Record<Sector, number>;
 }
 export interface ClientChoice { name: string; jobs: number; contacts: string[]; sectors: Sector[] }
-export interface User extends Permissions { id: number; email: string; name: string; role: "estimator" | "reviewer" | "admin"; active: boolean; sectors?: Sector[] | null }
+export interface User extends Permissions {
+  id: number; email: string; name: string; role: "estimator" | "reviewer" | "admin" | "field"; active: boolean; sectors?: Sector[] | null;
+  trade?: string; phone?: string; cost_rate?: number; charge_rate?: number; colour?: string;
+}
 
 export interface ChatAction { tool: string; summary: string }
 export interface ChatMsg { id: number; role: "user" | "assistant" | "note"; text: string; actions: ChatAction[]; user?: string; at?: string }
@@ -36,6 +42,7 @@ export interface Job {
   sector?: Sector; lead_date?: string | null; quote_sent_date?: string | null; decided_date?: string | null;
   lead_source?: string; contact?: string; sales_stage?: SalesStage;
   work_type?: string; value_band?: string; outcome_reason?: string;
+  job_no?: string; work_status?: string;
 }
 
 export interface Attention { kind: string; message: string; sheet_id?: number; sheet?: string }

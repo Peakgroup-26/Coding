@@ -6,8 +6,9 @@ import type { Job, Memory, Permissions, Sector, User } from "../types";
 import Admin from "./Admin";
 import { jobStage } from "./Home";
 import ReportingSettings from "./ReportingSettings";
+import { Integrations, OpsSettings } from "./AdminOps";
 
-type Tab = "people" | "jobs" | "memory" | "reporting" | "settings";
+type Tab = "people" | "jobs" | "memory" | "reporting" | "settings" | "integrations" | "operations";
 
 const SECTORS: [Sector, string][] = [["residential", "Res"], ["commercial", "Com"], ["maintenance", "Maint"]];
 
@@ -17,12 +18,16 @@ const PERMS: { key: keyof Permissions; label: string; help: string }[] = [
   { key: "can_all_jobs", label: "Everyone's jobs", help: "Other people's jobs and previous tenders. Off = only jobs they started" },
   { key: "can_past_rates", label: "Past civil rates", help: "The previous civil job rates library" },
   { key: "can_pricing", label: "Edit pricing", help: "Change price books, mappings and fitting rules" },
+  { key: "can_ops", label: "Operations", help: "Live jobs, scheduling, timesheets, purchasing, plant, customers and CRM" },
+  { key: "can_finance", label: "Finance", help: "WIP, budgets, cash flow, invoices, supplier prices and Xero" },
 ];
+const TRADES = ["", "plumber", "apprentice", "labourer", "supervisor", "project manager", "office", "manager"];
 
 function People() {
   const { user: me } = useApp();
   const [users, setUsers] = useState<User[]>([]);
-  const blank = { email: "", name: "", role: "estimator", password: "", can_hydraulic: true, can_civil: true, can_all_jobs: true, can_past_rates: true, can_pricing: true };
+  const blank = { email: "", name: "", role: "estimator", password: "", trade: "", cost_rate: 0, can_hydraulic: true, can_civil: true,
+    can_all_jobs: true, can_past_rates: true, can_pricing: true, can_ops: true, can_finance: false };
   const [form, setForm] = useState(blank);
   const [error, setError] = useState("");
   const load = () => api.get<User[]>("/api/users").then(setUsers);
@@ -42,7 +47,8 @@ function People() {
       <p className="small muted">Admins always see everything. Untick a box to hide that part of the app from someone; it's enforced on the server, not just hidden.</p>
       <table className="perm-table">
         <thead>
-          <tr><th>Person</th><th>Role</th>{PERMS.map((p) => <th key={p.key} title={p.help}>{p.label}</th>)}<th>Sectors</th><th>Active</th><th></th></tr>
+          <tr><th>Person</th><th>Role</th><th title="Trade, for the schedule and crew predictions">Trade</th>
+            <th title="What an hour costs the business, incl. super, workcover and leave: used for job costing">Cost $/h</th>{PERMS.map((p) => <th key={p.key} title={p.help}>{p.label}</th>)}<th>Sectors</th><th>Active</th><th></th></tr>
         </thead>
         <tbody>
           {users.map((u) => (
@@ -51,8 +57,16 @@ function People() {
               <td>
                 <select value={u.role} disabled={u.id === me.id} onChange={(e) => patch(u, { role: e.target.value })}>
                   <option value="estimator">Estimator</option><option value="reviewer">Reviewer</option><option value="admin">Admin</option>
+                  <option value="field">On the tools (phone app only)</option>
                 </select>
               </td>
+              <td>
+                <select value={u.trade ?? ""} onChange={(e) => patch(u, { trade: e.target.value })}>
+                  {TRADES.map((t) => <option key={t} value={t}>{t || "–"}</option>)}
+                </select>
+              </td>
+              <td><input type="number" min={0} step="0.5" style={{ width: 80 }} defaultValue={u.cost_rate || ""} placeholder="default"
+                         onBlur={(e) => Number(e.target.value || 0) !== (u.cost_rate || 0) && patch(u, { cost_rate: Number(e.target.value || 0) })} /></td>
               {PERMS.map((p) => (
                 <td key={p.key} className="c">
                   <input type="checkbox" title={p.help} checked={u.role === "admin" || u[p.key]} disabled={u.role === "admin"}
@@ -88,7 +102,13 @@ function People() {
           <input placeholder="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
           <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
             <option value="estimator">Estimator</option><option value="reviewer">Reviewer</option><option value="admin">Admin</option>
+            <option value="field">On the tools (phone app only)</option>
           </select>
+          <select value={form.trade} onChange={(e) => setForm({ ...form, trade: e.target.value })}>
+            {TRADES.map((t) => <option key={t} value={t}>{t || "Trade…"}</option>)}
+          </select>
+          <input type="number" min={0} placeholder="Cost $/h" style={{ width: 100 }} value={form.cost_rate || ""}
+                 onChange={(e) => setForm({ ...form, cost_rate: Number(e.target.value || 0) })} />
           <input placeholder="Starting password (8+)" type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
         </div>
         <div className="row wrap">
@@ -99,7 +119,9 @@ function People() {
           ))}
           <button className="primary" type="submit" disabled={!form.email || form.password.length < 8}>Add person</button>
         </div>
-        <p className="small muted">They can change their password under My account. Microsoft 365 sign-in also works once it's set up.</p>
+        <p className="small muted">They can change their password under My account. Microsoft 365 sign-in also works once it's set up.
+          "On the tools" people only get the phone app (clock in, their jobs, POs, pre-starts) and stay signed in on their phone.
+          Their login can be a username instead of an email.</p>
       </form>
       {error && <p className="error">{error}</p>}
     </section>
@@ -222,12 +244,13 @@ function MemoryAdmin() {
 }
 
 export default function AdminPortal() {
-  const [tab, setTab] = useState<Tab>("people");
-  const tabs: [Tab, string][] = [["people", "People & permissions"], ["jobs", "All jobs"], ["memory", "AI memory"], ["reporting", "Reporting"], ["settings", "Lists & settings"]];
+  const [tab, setTab] = useState<Tab>(() => (new URLSearchParams(window.location.search).get("tab") as Tab) || "people");
+  const tabs: [Tab, string][] = [["people", "People & permissions"], ["operations", "Operations & plant"], ["integrations", "Xero & messages"],
+    ["jobs", "All jobs"], ["memory", "AI memory"], ["reporting", "Reporting"], ["settings", "Lists & settings"]];
   return (
     <main className="page">
       <h1>Admin portal</h1>
-      <div className="tabs big-tabs">
+      <div className="tabs big-tabs scroll">
         {tabs.map(([k, l]) => <button key={k} className={tab === k ? "active" : ""} onClick={() => setTab(k)}>{l}</button>)}
       </div>
       {tab === "people" && <People />}
@@ -235,6 +258,8 @@ export default function AdminPortal() {
       {tab === "memory" && <MemoryAdmin />}
       {tab === "reporting" && <ReportingSettings />}
       {tab === "settings" && <Admin embedded />}
+      {tab === "integrations" && <Integrations />}
+      {tab === "operations" && <OpsSettings />}
     </main>
   );
 }

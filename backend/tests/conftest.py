@@ -10,6 +10,7 @@ os.environ["SECRET_KEY"] = "test-secret"
 os.environ["ADMIN_EMAIL"] = "admin@test.local"
 os.environ["ADMIN_PASSWORD"] = "admin-password"
 os.environ["AUTOPILOT_SYNC"] = "1"
+os.environ["BACKGROUND_TASKS"] = "0"  # tests run scheduler.tick() themselves
 
 import pymupdf as fitz  # noqa: E402
 import pytest  # noqa: E402

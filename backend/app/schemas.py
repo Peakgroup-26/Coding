@@ -27,7 +27,14 @@ class UserOut(ORM):
     can_all_jobs: bool = True
     can_past_rates: bool = True
     can_pricing: bool = True
+    can_ops: bool = True
+    can_finance: bool = False
     sectors: list[str] | None = None
+    trade: str = ""
+    phone: str = ""
+    cost_rate: float = 0.0
+    charge_rate: float = 0.0
+    colour: str = ""
 
 
 class UserIn(BaseModel):
@@ -40,7 +47,14 @@ class UserIn(BaseModel):
     can_all_jobs: bool = True
     can_past_rates: bool = True
     can_pricing: bool = True
+    can_ops: bool = True
+    can_finance: bool = False
     sectors: list[str] | None = None
+    trade: str = ""
+    phone: str = ""
+    cost_rate: float = Field(default=0.0, ge=0)
+    charge_rate: float = Field(default=0.0, ge=0)
+    colour: str = ""
 
 
 class UserPatch(BaseModel):
@@ -53,7 +67,14 @@ class UserPatch(BaseModel):
     can_all_jobs: bool | None = None
     can_past_rates: bool | None = None
     can_pricing: bool | None = None
+    can_ops: bool | None = None
+    can_finance: bool | None = None
     sectors: list[str] | None = None
+    trade: str | None = None
+    phone: str | None = None
+    cost_rate: float | None = Field(default=None, ge=0)
+    charge_rate: float | None = Field(default=None, ge=0)
+    colour: str | None = None
 
 
 class PasswordChange(BaseModel):
