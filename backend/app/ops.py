@@ -18,7 +18,7 @@ ACTIVE = ("scheduled", "in_progress", "on_hold", "complete")  # still costing / 
 CATEGORIES = ["labour", "materials", "subcontract", "plant", "other"]
 CATEGORY_LABELS = {"labour": "Labour", "materials": "Materials", "subcontract": "Subcontractors", "plant": "Plant & equipment",
                    "other": "Other"}
-TRADES = ["plumber", "apprentice", "labourer", "supervisor", "project manager", "office", "manager"]
+TRADES = ["plumber", "apprentice", "labourer", "foreman", "supervisor", "project manager", "office", "manager"]
 PRIORITIES = ["low", "normal", "high", "urgent"]
 
 DEFAULTS = {

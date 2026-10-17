@@ -18,6 +18,7 @@ LEVELS = ("none", "view", "edit")
 FEATURES: list[tuple[str, str, str, list[str], list[str]]] = [
     # Work
     ("my_work", "Work", "My work", ["/my-work"], [r"^/api/my-work"]),
+    ("todos", "Work", "Daily to-do lists: set them for the team and see who finished", ["/todos"], []),
     ("boards", "Work", "Boards (tasks, programmes, safety, forms)", ["/boards"], [r"^/api/boards"]),
     ("director", "Work", "Director's dashboard (team and client NPS)", ["/director"], [r"^/api/director\b"]),
     ("assistant", "Work", "Ask Lorojo and the AI chat", [], [r"^/api/assistant", r"^/api/jobs/\d+/chat", r"^/api/memories"]),
@@ -119,7 +120,7 @@ POSITIONS: list[tuple[str, str, dict[str, str]]] = [
     ("Project manager", "Runs live jobs; sees estimates and job money", {**_preset("none"), **_group("edit", "Operations", "Customers", "Work", "Safety"),
      "tenders": "view", "workbook": "view", "civil": "view", "reports": "edit", "rate_library": "view", "finance": "view",
      "invoices": "view", "supplier_prices": "view", "hr_licences": "view", "hr_leave": "view", **{k: "edit" for k in FIELD_KEYS}}),
-    ("Supervisor", "On site: jobs, schedule, timesheets, plant, crew", {**_preset("none"), "my_work": "edit", "boards": "edit", "assistant": "edit",
+    ("Supervisor", "On site: jobs, schedule, timesheets, plant, crew", {**_preset("none"), "my_work": "edit", "boards": "edit", "assistant": "edit", "todos": "edit",
      "tools": "edit", "vehicles_map": "view", "safety": "edit", "itp": "edit",
      "live_jobs": "edit", "schedule": "edit", "timesheets": "edit", "purchasing": "edit", "plant": "edit", "maintenance": "edit",
      "documents": "edit", "customers": "view", "hr_licences": "view", **{k: "edit" for k in FIELD_KEYS}}),
@@ -132,6 +133,9 @@ POSITIONS: list[tuple[str, str, dict[str, str]]] = [
     ("Labourer / operator", "Phone app: clock in, pre-starts, timesheet, Me", {**_preset("none"), **{k: "edit" for k in FIELD_KEYS},
      "field_crew": "none", "field_jobs": "view"}),
 ]
+
+_sup = next(i for i, p in enumerate(POSITIONS) if p[0] == "Supervisor")
+POSITIONS.insert(_sup + 1, ("Foreman", "Leads a crew on site (same start as Supervisor)", dict(POSITIONS[_sup][2])))
 
 for _name, _d, _feats in POSITIONS:  # the director's dashboard is for the director and the office manager
     if _name not in ("Director", "Office manager"):

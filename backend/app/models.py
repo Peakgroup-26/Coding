@@ -2085,3 +2085,20 @@ class ItpCheck(Base):
     signed_role: Mapped[str] = mapped_column(String(50), default="")
     signature: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+# --- Daily to-do lists (todos.py): set by the person, their supervisor or the office; clocking off needs each one ticked or explained ---
+class DailyTask(Base):
+    __tablename__ = "daily_tasks"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)  # whose list it's on
+    day: Mapped[date] = mapped_column(Date, index=True)
+    text: Mapped[str] = mapped_column(String(500))
+    job_id: Mapped[int | None] = mapped_column(ForeignKey("jobs.id", ondelete="SET NULL"), nullable=True)
+    set_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="open")  # open | done | not_done
+    comment: Mapped[str] = mapped_column(Text, default="")  # why it couldn't be finished
+    position: Mapped[int] = mapped_column(Integer, default=0)
+    done_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    carried_from: Mapped[int | None] = mapped_column(Integer, nullable=True)  # the unfinished task this one continues
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

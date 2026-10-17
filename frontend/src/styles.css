@@ -912,3 +912,21 @@ button.tile:hover { border-color: var(--orange); }
 .grid-buttons .btn { padding: 14px 8px; text-decoration: none; }
 a.todo, a.todo:hover { text-decoration: none; }
 .card-title { font-size: 15px; } .row:has(> .card-title) { flex-wrap: wrap; }
+
+/* --- Daily to-dos --- */
+.todo-card { display: flex; flex-direction: column; gap: 6px; }
+.todo-card.attention { border-color: var(--orange); box-shadow: 0 0 0 2px var(--peach-soft); }
+.todo-item { border-top: 1px solid var(--line); padding: 8px 0 4px; }
+.todo-item:first-of-type { border-top: 0; }
+.todo-item .row { align-items: flex-start; gap: 10px; flex-wrap: nowrap; }
+.todo-tick { width: 30px; height: 30px; flex: none; border-radius: 8px; border: 2px solid #c9c1b9; background: #fff; font-weight: 700; font-size: 16px; padding: 0;
+  display: grid; place-items: center; color: #fff; cursor: pointer; }
+.todo-item.done .todo-tick { background: var(--ok); border-color: var(--ok); }
+.todo-item.not_done .todo-tick { background: var(--warn); border-color: var(--warn); }
+.todo-item.done .todo-text { text-decoration: line-through; color: var(--muted); }
+.todo-text { font-weight: 500; }
+.todo-why { margin: 6px 0 0 40px; flex-wrap: wrap !important; }
+.todo-why input { min-width: 100%; }
+.todo-add { margin-top: 6px; }
+.todo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; align-items: start; }
+.todo-person { display: flex; flex-direction: column; gap: 4px; }

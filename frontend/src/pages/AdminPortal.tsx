@@ -23,7 +23,7 @@ const PERMS: { key: keyof Permissions; label: string; help: string }[] = [
   { key: "can_finance", label: "Finance", help: "WIP, budgets, cash flow, invoices, supplier prices and Xero" },
   { key: "can_hr", label: "People (HR)", help: "Staff records, pay history, leave balances, licences, reviews, surveys and hiring" },
 ];
-const TRADES = ["", "plumber", "apprentice", "labourer", "supervisor", "project manager", "office", "manager"];
+const TRADES = ["", "plumber", "apprentice", "labourer", "foreman", "supervisor", "project manager", "office", "manager"];
 
 function People() {
   const { user: me } = useApp();

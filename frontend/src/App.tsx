@@ -37,6 +37,7 @@ import { RateLibrary } from "./pages/Workbook";
 import { BoardFormPage, Careers } from "./pages/PublicPages";
 import Director from "./pages/Director";
 import ToolsPage from "./pages/Tools";
+import TodosPage from "./pages/Todos";
 import Vehicles from "./pages/Vehicles";
 import Safety from "./pages/Safety";
 import { SurveyGate } from "./pages/FieldMe";
@@ -117,7 +118,7 @@ export default function App() {
   const fin = can(user, "can_finance");
   const hr = can(user, "can_hr");
   const groups: { label: string; links: [string, string, boolean][] }[] = [
-    { label: "Work", links: [["/director", "Director's dashboard", true], ["/my-work", "My work", true], ["/boards", "Boards", true],
+    { label: "Work", links: [["/director", "Director's dashboard", true], ["/my-work", "My work", true], ["/todos", "To-do lists", true], ["/boards", "Boards", true],
       ["/field/me/feedback", "Feedback to my manager", true]] },
     { label: "Estimating", links: [["/", "Tenders & quotes", true], ["/sales", "Sales", true], ["/rate-library", "Rate library", true],
       ["/civil-rates", "Civil rates", can(user, "can_past_rates") && can(user, "can_civil")],
@@ -139,7 +140,7 @@ export default function App() {
       ["/purchasing?tab=prices", "Supplier prices", fin], ["/reports", "Job reports", true]] },
   ];
   const FEATURE_OF: Record<string, string> = {
-    "/director": "director", "/my-work": "my_work", "/boards": "boards", "/": "tenders", "/jobs": "tenders", "/sales": "sales", "/rate-library": "rate_library",
+    "/director": "director", "/my-work": "my_work", "/todos": "todos", "/boards": "boards", "/": "tenders", "/jobs": "tenders", "/sales": "sales", "/rate-library": "rate_library",
     "/civil-rates": "civil_rates", "/price-books": "price_books", "/rules": "rules", "/mappings": "mappings", "/work": "live_jobs",
     "/schedule": "schedule", "/timesheets": "timesheets", "/purchasing": "purchasing", "/plant": "plant", "/maintenance": "maintenance",
     "/documents": "documents", "/customers": "customers", "/crm": "crm", "/finance": "finance", "/finance?tab=wip": "finance",
@@ -196,6 +197,7 @@ export default function App() {
           <Route path="/purchasing" element={G("purchasing", <Purchasing />)} />
           <Route path="/plant" element={G("plant", <PlantPage />)} />
           <Route path="/plant/:plantId" element={G("plant", <PlantPage />)} />
+          <Route path="/todos" element={G("todos", <TodosPage />)} />
           <Route path="/tools" element={G("tools", <ToolsPage />)} />
           <Route path="/vehicles" element={G("vehicles_map", <Vehicles />)} />
           <Route path="/safety" element={G("safety", <Safety />)} />

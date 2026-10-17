@@ -308,6 +308,25 @@ The AI never invents amounts or percentages: where the document doesn't state on
 
 Reading the plans again (for example, a new revision) keeps approved lines and typed-in rates. If the new reading differs, it adds a note to the line instead of changing an approved quantity.
 
+## Daily to-do lists
+
+Everyone has a **To-do today** list at the top of the phone's Today screen. They can add their own tasks.
+
+**Who sets lists for others.** Supervisors, foremen, managers and the office set lists for the team on the phone ("Set the
+crew's to-dos") or at Work → To-do lists. A manager can set lists for the people who report to them.
+- Pick people (or "Whole crew"), type one task per line, and optionally tie the tasks to a job.
+- Lists can be set for today, tomorrow or any day.
+- People get a message when someone sets tasks for them.
+
+**Finishing tasks.** Each task is ticked off, or marked **Couldn't finish** with a reason. The reason goes straight back to whoever
+set the task. People can remove the tasks they added themselves, but not ones someone else set.
+
+**Clocking off.** The phone won't let anyone clock off until every task on that day's list is ticked off or explained, and the
+server enforces the same rule. A supervisor clocking the crew off together skips anyone whose list isn't finished, and says who.
+
+**The office view** shows each person's list with done / couldn't finish / still open, and the reasons. **Carry over yesterday's
+unfinished** puts anything not done onto the new day's list.
+
 ## Tools, vehicles and safety
 
 **Tools** (Operations → Tools; phone → Tools tab). Every tool is in the register with its tag no., value, photo and test-and-tag

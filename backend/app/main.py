@@ -12,7 +12,7 @@ from .db import SessionLocal, engine
 from .migrate import migrate
 from .autopilot import recover_interrupted
 from .routers import (ai, assistant, auth_users, autopilot, boards, chat, civil, estimate, field, jobs, money, ops, people, polish, pricing,
-                      project, purchasing, reports, rules, safety, sales, settings, sheets, takeoff, tender, time, tools, workbook)
+                      project, purchasing, reports, rules, safety, sales, settings, sheets, takeoff, tender, time, todos, tools, workbook)
 from . import scheduler
 from .seed import seed
 
@@ -39,7 +39,7 @@ def create_app() -> FastAPI:
               autopilot.router, civil.router, tender.router, chat.router, reports.router,
               sales.router, ops.router, time.router, field.router, purchasing.router, project.router, money.router, assistant.router,
               people.router, people.me, people.director, boards.router, boards.field, workbook.router,
-              tools.router, tools.field, safety.router, safety.field):
+              tools.router, tools.field, safety.router, safety.field, todos.router):
         app.include_router(r, dependencies=[Depends(enforce)])  # access.enforce: who can see which job
     app.include_router(money.public)  # feedback forms and the Xero sign-in return: no sign-in needed
     app.include_router(people.public)  # the careers page and job applications

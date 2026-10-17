@@ -323,3 +323,11 @@ version, and everyone must sign again.
 121. **PDFs are built on the server** (PyMuPDF), so they look the same from every phone. Sharing uses the phone's own share
 sheet where it can, so they go out through whatever app people already use.
 
+122. **To-dos gate clocking off, but a reason counts.** People can't always finish what they were given (weather, deliveries,
+inspectors), so a task needs to be either ticked or explained, not necessarily done. The explanation goes to whoever set it. The
+day that counts is the day they clocked on, so a night shift finishing after midnight is judged on its own list. The automatic
+"forgot to clock off" safety net and office timesheet edits aren't blocked.
+
+123. **Who can set someone else's list:** supervisors, foremen, project managers and managers (by trade); office staff with the
+To-do lists feature; and anyone for the people who report to them (People → manager). Everyone else keeps only their own list.
+

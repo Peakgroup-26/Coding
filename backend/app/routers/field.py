@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
-from .. import ops, plant, project, purchasing, storage
+from .. import ops, plant, project, purchasing, storage, todos
 from .. import timesheets as ts
 from ..access import can_see_job
 from ..audit import record
@@ -56,7 +56,7 @@ def today(db: Session = Depends(get_db), user: User = Depends(current_user)):
             "todo": todo, "end_needs": plant.end_requirements(db, user, d) if cur else [],
             "notifications": [{"id": n.id, "kind": n.kind, "text": n.text, "link": n.link, "at": n.created_at.isoformat()} for n in unread],
             "vehicles": [{"id": v.id, "name": v.name, "rego": v.rego} for v in plant.my_vehicles(db, user)],
-            "is_supervisor": user.role == "admin" or user.trade in ("supervisor", "project manager", "manager")}
+            "is_supervisor": user.role == "admin" or user.trade in todos.LEADS}
 
 
 @router.get("/jobs")
@@ -150,7 +150,7 @@ class ClockOut(BaseModel):
 
 @router.post("/clock-out")
 def clock_out(body: ClockOut, db: Session = Depends(get_db), user: User = Depends(current_user)):
-    needs = plant.end_requirements(db, user)
+    needs = plant.end_requirements(db, user) + todos.clock_off_problems(db, user)
     if needs:
         raise HTTPException(409, {"message": needs[0], "problems": needs})
     e = ts.clock_out(db, user, body.lat, body.lng, body.notes, _when(body.at))
@@ -190,23 +190,26 @@ class CrewIn(BaseModel):
 @router.post("/crew")
 def crew(body: CrewIn, db: Session = Depends(get_db), user: User = Depends(current_user)):
     """A supervisor clocks their crew on or off together."""
-    if not (user.role == "admin" or user.trade in ("supervisor", "project manager", "manager")):
+    if not (user.role == "admin" or user.trade in todos.LEADS):
         raise HTTPException(403, "Only supervisors can clock a crew in")
     if body.job_id:
         _job(db, body.job_id, user)
-    done = []
+    done, skipped = [], []
     for uid in body.user_ids:
         u = db.get(User, uid)
         if u is None or not u.active:
             continue
         if body.out:
+            if todos.clock_off_problems(db, u):
+                skipped.append(u.name or u.email)  # their to-dos come first, same as clocking off themselves
+                continue
             if ts.clock_out(db, u, body.lat, body.lng, f"Clocked off by {user.name or user.email}"):
                 done.append(u.name or u.email)
         else:
             ts.clock_in(db, u, body.job_id, body.task, body.lat, body.lng, source="crew", notes=f"Clocked on by {user.name or user.email}")
             done.append(u.name or u.email)
     db.commit()
-    return {"done": done}
+    return {"done": done, "skipped": skipped}
 
 
 @router.get("/crew")

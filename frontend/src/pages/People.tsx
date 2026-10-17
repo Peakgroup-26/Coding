@@ -97,7 +97,7 @@ function NewStarter({ opts, people, onClose, onDone }: { opts: Options; people: 
           <Field label="Uses"><select value={f.role} onChange={(e) => set("role", e.target.value)}><option value="field">Phone app (on the tools)</option>
             <option value="estimator">Office app</option><option value="reviewer">Office app + sign-off</option></select></Field>
           <Field label="Trade"><select value={f.trade} onChange={(e) => set("trade", e.target.value)}>
-            {["plumber", "apprentice", "labourer", "supervisor", "project manager", "office", "manager"].map((t) => <option key={t}>{t}</option>)}</select></Field>
+            {["plumber", "apprentice", "labourer", "foreman", "supervisor", "project manager", "office", "manager"].map((t) => <option key={t}>{t}</option>)}</select></Field>
         </div>
         <div className="row wrap">
           <Field label="Position"><input value={f.position} onChange={(e) => set("position", e.target.value)} placeholder="e.g. Licensed plumber" /></Field>

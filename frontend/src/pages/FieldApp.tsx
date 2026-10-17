@@ -8,6 +8,7 @@ import { sees, useApp } from "../App";
 import { AskPeakButton } from "./AskPeak";
 import { Directory, FeedbackPage, FieldBoardItem, MeTab, MyBoardItems, ReviewForm, SignPolicy, SurveyForm, SurveyGate, WorkItem } from "./FieldMe";
 import { FieldTools } from "./Tools";
+import { FieldTeamTodos, MyTodos } from "./Todos";
 import { PdfShare } from "./Share";
 import { FieldItp, FieldJobSafety, FieldReport, FieldToolbox, SafetyPrompts, SafetyTab } from "./FieldSafety";
 import { addDays, DocOut, ErrorLine, fmtDay, getLocation, shrinkImage, hrs, monday, num, PhotoButton, SignaturePad, todayIso, useAction, useLoad } from "../ui";
@@ -89,6 +90,7 @@ export default function FieldApp({ onLogout }: { onLogout?: () => void }) {
           <Route path="timesheet" element={<TimesheetTab />} />
           <Route path="crew" element={<CrewTab />} />
           <Route path="tools" element={<FieldTools />} />
+          <Route path="todos" element={<FieldTeamTodos />} />
           <Route path="safety" element={<SafetyTab />} />
           <Route path="safety/jobs/:jobId" element={<FieldJobSafety />} />
           <Route path="safety/itp/:itpId" element={<FieldItp />} />
@@ -124,6 +126,7 @@ function TodayTab({ onQueued }: { onQueued: () => void }) {
   const [run, error, busy, setError] = useAction();
   const [problems, setProblems] = useState<string[]>([]);
   const [msg, setMsg] = useState("");
+  const [openTodos, setOpenTodos] = useState(0);
   const timer = useTicker(t?.current?.start_at);
   if (!t) return <p className="muted">{loadErr || "Loading…"}</p>;
   const act = (path: string, body: Record<string, unknown> = {}) => run(async () => {
@@ -146,6 +149,7 @@ function TodayTab({ onQueued }: { onQueued: () => void }) {
       <div className="hello"><h1>G'day {t.user.name.split(" ")[0]}</h1><span className="muted">{fmtDay(t.day)}</span></div>
       <BoardTasks />
       {sees(user, "field_safety") && <SafetyPrompts />}
+      <MyTodos me={user.id} onOpen={setOpenTodos} clockedIn={!!t.current} />
       {t.todo.blocking.map((b) => (
         <Link key={b.kind + b.plant_id} to={`/field/prestart/${b.plant_id}?kind=${b.kind === "wash" ? "wash" : "weekly"}`} className="todo blocking">
           ⚠️ {b.text}<span>Do it now ›</span></Link>
@@ -165,7 +169,8 @@ function TodayTab({ onQueued }: { onQueued: () => void }) {
               <button onClick={() => setPicking("switch")} disabled={busy}>Switch job</button>
               <button onClick={() => act(cur.on_break ? "/api/field/break/end" : "/api/field/break/start")} disabled={busy}>
                 {cur.on_break ? "End break" : "Take a break"}</button>
-              <button className="danger big-btn" onClick={() => act("/api/field/clock-out")} disabled={busy}>Clock out</button>
+              <button className="danger big-btn" onClick={() => act("/api/field/clock-out")} disabled={busy || openTodos > 0}
+                title={openTodos ? "Finish or explain your to-dos first" : undefined}>Clock out{openTodos ? ` (${openTodos} to-do${openTodos > 1 ? "s" : ""} left)` : ""}</button>
             </div>
           </>
         ) : (
@@ -734,8 +739,8 @@ function CrewTab() {
   const [msg, setMsg] = useState("");
   const go = (out: boolean) => run(async () => {
     const loc = await getLocation();
-    const r = await api.post<{ done: string[] }>("/api/field/crew", { user_ids: sel, job_id: job || null, out, ...loc });
-    setMsg(`${out ? "Clocked off" : "Clocked on"}: ${r.done.join(", ")}`); setSel([]); reload();
+    const r = await api.post<{ done: string[]; skipped?: string[] }>("/api/field/crew", { user_ids: sel, job_id: job || null, out, ...loc });
+    setMsg(`${out ? "Clocked off" : "Clocked on"}: ${r.done.join(", ") || "nobody"}${r.skipped?.length ? `. Not clocked off, to-dos still open: ${r.skipped.join(", ")}` : ""}`); setSel([]); reload();
   });
   const toggle = useCallback((id: number) => setSel((s) => s.includes(id) ? s.filter((x) => x !== id) : [...s, id]), []);
   return (
