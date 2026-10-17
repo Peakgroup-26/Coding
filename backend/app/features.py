@@ -18,7 +18,7 @@ LEVELS = ("none", "view", "edit")
 FEATURES: list[tuple[str, str, str, list[str], list[str]]] = [
     # Work
     ("my_work", "Work", "My work", ["/my-work"], [r"^/api/my-work"]),
-    ("todos", "Work", "Daily to-do lists: set them for the team and see who finished", ["/todos"], []),
+    ("todos", "Work", "Daily to-do lists: set them for the team, and the performance report", ["/todos"], [r"^/api/field/todos/report\b"]),
     ("boards", "Work", "Boards (tasks, programmes, safety, forms)", ["/boards"], [r"^/api/boards"]),
     ("director", "Work", "Director's dashboard (team and client NPS)", ["/director"], [r"^/api/director\b"]),
     ("assistant", "Work", "Ask Lorojo and the AI chat", [], [r"^/api/assistant", r"^/api/jobs/\d+/chat", r"^/api/memories"]),

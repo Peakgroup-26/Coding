@@ -114,3 +114,84 @@ def carry(body: CarryIn, db: Session = Depends(get_db), user: User = Depends(cur
     n = td.carry_over(db, user, body.from_day, body.to_day, body.user_ids)
     db.commit()
     return {"carried": n}
+
+
+class ParseIn(BaseModel):
+    text: str = Field(min_length=2, max_length=8000)
+    day: date | None = None
+
+
+@router.post("/todos/parse")
+def parse(body: ParseIn, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    """What a supervisor said, split into a list per person, for them to check before saving."""
+    return td.parse_spoken(db, user, body.text, body.day)
+
+
+class BatchTask(BaseModel):
+    text: str = Field(min_length=1, max_length=500)
+    job_id: int | None = None
+
+
+class BatchList(BaseModel):
+    user_id: int
+    tasks: list[BatchTask] = Field(min_length=1, max_length=50)
+
+
+class BatchIn(BaseModel):
+    day: date
+    lists: list[BatchList] = Field(min_length=1, max_length=100)
+
+
+@router.post("/todos/batch")
+def add_batch(body: BatchIn, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    if body.day < td.today() - timedelta(days=1):
+        raise HTTPException(422, "That day has gone")
+    made = []
+    try:
+        for li in body.lists:
+            by_job: dict[int | None, list[str]] = {}
+            for t in li.tasks:
+                by_job.setdefault(t.job_id if t.job_id and db.get(Job, t.job_id) else None, []).append(t.text)
+            for jid, texts in by_job.items():
+                made += td.add(db, user, [li.user_id], texts, body.day, jid)
+    except PermissionError as e:
+        db.rollback()
+        raise HTTPException(403, str(e))
+    db.commit()
+    return {"added": len(made), "people": len({t.user_id for t in made})}
+
+
+# --- the management report (behind the To-do lists feature; on /api/field so supervisors on the phone can open it too) ---
+
+
+def _range(start: date | None, end: date | None, group: str) -> tuple[date, date]:
+    end = end or td.today()
+    if start is None:
+        start = end.replace(day=1) if group == "month" else end - timedelta(days=end.weekday())
+    if start > end:
+        raise HTTPException(422, "The start is after the end")
+    if (end - start).days > 800:
+        raise HTTPException(422, "Pick up to about two years")
+    return start, end
+
+
+@router.get("/todos/report")
+def report(start: date | None = None, end: date | None = None, group: str = "week", db: Session = Depends(get_db),
+           user: User = Depends(current_user)):
+    if group not in ("week", "month"):
+        raise HTTPException(422, "By week or by month")
+    s, e = _range(start, end, group)
+    return td.report(db, user, s, e, group)
+
+
+@router.get("/todos/report.xlsx")
+def report_xlsx(start: date | None = None, end: date | None = None, group: str = "week", db: Session = Depends(get_db),
+                user: User = Depends(current_user)):
+    from fastapi import Response
+
+    if group not in ("week", "month"):
+        raise HTTPException(422, "By week or by month")
+    s, e = _range(start, end, group)
+    data = td.report_xlsx(td.report(db, user, s, e, group))
+    return Response(data, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers={"Content-Disposition": f'attachment; filename="todo-performance-{s}-to-{e}.xlsx"'})

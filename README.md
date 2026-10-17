@@ -324,6 +324,25 @@ set the task. People can remove the tasks they added themselves, but not ones so
 **Clocking off.** The phone won't let anyone clock off until every task on that day's list is ticked off or explained, and the
 server enforces the same rule. A supervisor clocking the crew off together skips anyone whose list isn't finished, and says who.
 
+**Talk it in.** Above the lists there's a 🎤 **Talk** button. Say it the way you would on site: "Dave, pressure test level 2 and
+clean up the slab. Sam, pack down the trench shield. Everyone lock the container."
+- Lorojo splits what you said into a list for each person. "Everyone" means the crew on the tools, and "I" means you.
+- It shows you the lists to check, edit or remove anything before you save.
+- With the AI connected, Claude reads it, matches misheard names and links tasks to named jobs.
+- Without the AI, a built-in reader does the same from names and "and / then".
+- Speech works in Chrome, Edge and Safari, including phones. Anywhere else, type it the same way.
+
+**Performance report** (To-do lists → Performance report, also linked from People → Reports). For any range (this week, last
+month, the last 12 months, or your own dates), by week or by month, it shows each person's:
+- to-dos, finished, couldn't finish and never actioned
+- % finished, and days with everything done
+- a bar for each week or month
+- a rating: Performing (85%+ finished, no more than 1 in 20 never actioned), Watch (65–85%) or Needs attention (under 65%)
+
+Worst first; tap a person to see the reasons they gave. **Export to Excel** gives a Summary sheet, a sheet by week or month,
+and every reason. Supervisors see the people they look after; the office sees everyone. Today's unfinished to-dos count once the
+day is over.
+
 **The office view** shows each person's list with done / couldn't finish / still open, and the reasons. **Carry over yesterday's
 unfinished** puts anything not done onto the new day's list.
 

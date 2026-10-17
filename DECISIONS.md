@@ -331,3 +331,11 @@ day that counts is the day they clocked on, so a night shift finishing after mid
 123. **Who can set someone else's list:** supervisors, foremen, project managers and managers (by trade); office staff with the
 To-do lists feature; and anyone for the people who report to them (People → manager). Everyone else keeps only their own list.
 
+124. **Spoken lists are always checked before saving.** Speech-to-text mishears names, so what was said becomes a draft that the
+supervisor edits and then saves. Claude does the reading when the AI is connected. A simple word-by-word reader (a name starts
+that person's tasks; "and", "then" and commas split them) works without it, so the feature never depends on the AI.
+
+125. **The performance rating is about finishing, with reasons kept separate.** "Couldn't finish" with a reason is honest and
+allowed, but it still isn't finished, so it lowers the % finished. The reasons sit next to the number, so management can tell rain
+and late deliveries apart from a pattern. Tasks nobody ever ticked or explained (missed clock-offs) are counted on their own.
+

@@ -85,7 +85,8 @@ const SpeechRec: (new () => Recognition) | undefined =
   (window as unknown as { SpeechRecognition?: new () => Recognition }).SpeechRecognition
   ?? (window as unknown as { webkitSpeechRecognition?: new () => Recognition }).webkitSpeechRecognition;
 
-export function useMic(onFinal: (text: string) => void, onInterim?: (text: string) => void) {
+/** Speech to text. continuous: keep listening through pauses until stop() (for dictating a whole list). */
+export function useMic(onFinal: (text: string) => void, onInterim?: (text: string) => void, continuous = false) {
   const [listening, setListening] = useState(false);
   const rec = useRef<Recognition | null>(null);
   const heard = useRef("");
@@ -93,13 +94,13 @@ export function useMic(onFinal: (text: string) => void, onInterim?: (text: strin
   const start = () => {
     if (!SpeechRec || listening) return;
     const r = new SpeechRec();
-    r.lang = "en-AU"; r.interimResults = true; r.continuous = false;
+    r.lang = "en-AU"; r.interimResults = true; r.continuous = continuous;
     heard.current = "";
     r.onresult = (e) => {
       let interim = "";
       for (let i = e.resultIndex; i < e.results.length; i++) {
         const res = e.results[i];
-        if (res.isFinal) heard.current += res[0].transcript; else interim += res[0].transcript;
+        if (res.isFinal) heard.current += (heard.current && continuous ? " " : "") + res[0].transcript.trim(); else interim += " " + res[0].transcript;
       }
       onInterim?.((heard.current + interim).trim());
     };

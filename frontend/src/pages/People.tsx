@@ -521,6 +521,8 @@ function Reports() {
   if (!r) return <p className="muted">Loading…</p>;
   return (
     <>
+      <Link to="/todos?tab=performance" className="job-tile">📋 <b>To-do performance</b>
+        <span className="small muted">Who finishes their daily to-dos, week by week and month by month, with the reasons when they can't. Export to Excel.</span></Link>
       <div className="tiles">
         <div className="tile"><b>{r.headcount}</b><span>People</span></div>
         <div className="tile"><b>{r.starters_12m} / {r.leavers_12m}</b><span>Started / left (12 months)</span></div>

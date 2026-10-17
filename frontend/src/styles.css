@@ -930,3 +930,24 @@ a.todo, a.todo:hover { text-decoration: none; }
 .todo-add { margin-top: 6px; }
 .todo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; align-items: start; }
 .todo-person { display: flex; flex-direction: column; gap: 4px; }
+
+/* --- Talk it in, and the to-do performance report --- */
+.talk-card { border-color: var(--peach); }
+.mic-big { background: var(--orange); color: #fff; border: 0; border-radius: 22px; padding: 9px 18px; font-weight: 700; font-size: 15px; cursor: pointer; }
+.mic-big.on { background: var(--bad); animation: mic-pulse 1.2s infinite; }
+@keyframes mic-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(196,43,43,.45); } 50% { box-shadow: 0 0 0 8px rgba(196,43,43,0); } }
+textarea.listening { border-color: var(--orange); background: var(--peach-soft); }
+.draft-person { border-left: 3px solid var(--orange); padding: 2px 0 2px 10px; display: flex; flex-direction: column; gap: 4px; }
+.draft-task { gap: 6px; flex-wrap: nowrap; }
+.rate-chip { display: inline-block; padding: 2px 9px; border-radius: 10px; font-size: 12px; font-weight: 600; background: #eee7e1; white-space: nowrap; }
+.rate-chip.ok { background: #d6f0de; color: var(--ok); }
+.rate-chip.warn { background: #fff1d9; color: var(--warn); }
+.rate-chip.bad { background: #fde5e5; color: var(--bad); }
+.pct-bar { display: inline-block; width: 60px; height: 7px; background: #eee7e1; border-radius: 4px; overflow: hidden; margin-right: 6px; vertical-align: middle; }
+.pct-bar span { display: block; height: 100%; background: var(--orange); }
+.spark { display: flex; align-items: flex-end; gap: 2px; height: 26px; min-width: 60px; }
+.spark span { flex: 1; max-width: 12px; min-width: 5px; border-radius: 2px; background: #ddd5ce; }
+.spark span.ok { background: var(--ok); } .spark span.warn { background: #e0a030; } .spark span.bad { background: var(--bad); }
+.perf-detail td { background: #fbf8f5; }
+.period-pill { display: inline-block; margin: 0 10px 4px 0; }
+.reasons { margin: 4px 0; padding-left: 18px; }
